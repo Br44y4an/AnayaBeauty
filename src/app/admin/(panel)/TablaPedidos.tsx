@@ -81,6 +81,13 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
 
             <div className="shrink-0 text-right">
               <p className="font-bold text-fucsia">{pesos(p.total)}</p>
+              {(p.porMayor || p.porcentajeDescuento > 0) && (
+                <p className="text-[10px] text-lila">
+                  {p.porMayor && "por mayor"}
+                  {p.porMayor && p.porcentajeDescuento > 0 && " + "}
+                  {p.porcentajeDescuento > 0 && `${p.porcentajeDescuento}%`}
+                </p>
+              )}
               <span
                 className={`mt-1 inline-block rounded-pastilla px-3 py-1 text-xs font-bold ${COLOR_ESTADO[p.estado]}`}
               >
@@ -96,7 +103,10 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                   <li key={l.id} className="flex justify-between gap-2 text-sm">
                     <span className="min-w-0">
                       <span className="text-[11px] font-bold text-lila">{l.referencia}</span>{" "}
-                      {l.nombre}{" "}
+                      {l.nombre}
+                      {l.tono && (
+                        <strong className="text-fucsia"> · {l.tono}</strong>
+                      )}{" "}
                       <span className="text-carbon-suave">x{l.cantidad}</span>
                     </span>
                     <span className="shrink-0 font-semibold text-carbon">

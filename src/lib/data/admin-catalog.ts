@@ -12,7 +12,8 @@ const CAMPOS = `
   id, referencia, nombre, descripcion, category_id,
   imagen_principal, galeria, stock, activo,
   categories ( nombre ),
-  price_tiers ( min_cantidad, precio_unitario )
+  price_tiers ( min_cantidad, precio_unitario ),
+  product_shades ( id, nombre, color_hex, orden )
 `;
 
 export async function listarProductosAdmin(busqueda?: string): Promise<Producto[]> {
@@ -66,4 +67,22 @@ export async function obtenerConfiguracion(): Promise<
     .order("clave");
 
   return data ?? [];
+}
+
+/** Reglas de descuento, incluidas las desactivadas. */
+export async function listarReglasDescuento(): Promise<
+  { id: string; montoMinimo: number; porcentaje: number; activo: boolean }[]
+> {
+  const supabase = clienteAdmin();
+  const { data } = await supabase
+    .from("discount_rules")
+    .select("id, monto_minimo, porcentaje, activo")
+    .order("monto_minimo");
+
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    montoMinimo: r.monto_minimo,
+    porcentaje: r.porcentaje,
+    activo: r.activo,
+  }));
 }

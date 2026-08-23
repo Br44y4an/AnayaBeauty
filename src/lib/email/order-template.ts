@@ -6,10 +6,15 @@ export type DatosCorreo = {
   whatsapp: string;
   ciudad: string;
   codigo: string;
+  subtotal: number;
+  descuento: number;
+  porcentaje: number;
+  porMayor: boolean;
   total: number;
   lineas: {
     referencia: string;
     nombre: string;
+    tono: string | null;
     cantidad: number;
     subtotal: number;
   }[];
@@ -34,6 +39,11 @@ export function plantillaCorreoPedido(datos: DatosCorreo): string {
           <td style="padding:10px 0;border-bottom:1px solid #FDF2F7;">
             <span style="color:#A97FD0;font-size:11px;font-weight:bold;">${escapar(l.referencia)}</span><br>
             <span style="color:#3D2B36;font-size:14px;">${escapar(l.nombre)}</span>
+            ${
+              l.tono
+                ? `<br><span style="color:#E5308A;font-size:12px;font-weight:bold;">Tono: ${escapar(l.tono)}</span>`
+                : ""
+            }
           </td>
           <td style="padding:10px 0;border-bottom:1px solid #FDF2F7;text-align:center;color:#3D2B36;">
             x${l.cantidad}
@@ -44,6 +54,34 @@ export function plantillaCorreoPedido(datos: DatosCorreo): string {
         </tr>`
     )
     .join("");
+
+  // El desglose solo aparece si hubo algún beneficio, para no llenar el
+  // correo de líneas en cero.
+  const hayBeneficio = datos.porMayor || datos.porcentaje > 0;
+
+  const desglose = hayBeneficio
+    ? `
+        <tr>
+          <td colspan="2" style="padding-top:12px;font-size:13px;color:#7A6470;">Subtotal</td>
+          <td style="padding-top:12px;text-align:right;font-size:13px;color:#7A6470;">${pesos(datos.subtotal)}</td>
+        </tr>
+        ${
+          datos.porMayor
+            ? `<tr>
+                 <td colspan="2" style="font-size:13px;color:#A97FD0;font-weight:bold;">Precio por mayor aplicado</td>
+                 <td style="text-align:right;font-size:13px;color:#A97FD0;">sí</td>
+               </tr>`
+            : ""
+        }
+        ${
+          datos.porcentaje > 0
+            ? `<tr>
+                 <td colspan="2" style="font-size:13px;color:#A97FD0;font-weight:bold;">Descuento ${datos.porcentaje}%</td>
+                 <td style="text-align:right;font-size:13px;color:#A97FD0;">−${pesos(datos.descuento)}</td>
+               </tr>`
+            : ""
+        }`
+    : "";
 
   return `<!doctype html>
 <html lang="es">
@@ -64,6 +102,7 @@ export function plantillaCorreoPedido(datos: DatosCorreo): string {
 
       <table role="presentation" width="100%">
         ${filas}
+        ${desglose}
         <tr>
           <td colspan="2" style="padding-top:16px;font-size:18px;color:#3D2B36;">TOTAL</td>
           <td style="padding-top:16px;text-align:right;font-size:22px;color:#E5308A;font-weight:bold;">

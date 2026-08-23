@@ -7,11 +7,15 @@ const datos = {
   whatsapp: "3001234567",
   ciudad: "Medellín",
   codigo: "4821",
+  subtotal: 74000,
+  descuento: 0,
+  porcentaje: 0,
+  porMayor: false,
   total: 74000,
   lineas: [
-    { referencia: "REF-101", nombre: "Labial Rojo Pasión", cantidad: 3, subtotal: 27000 },
-    { referencia: "REF-233", nombre: "Rubor Durazno", cantidad: 1, subtotal: 12000 },
-    { referencia: "REF-410", nombre: "Base Mate Natural", cantidad: 1, subtotal: 35000 },
+    { referencia: "REF-101", nombre: "Labial Rojo Pasión", tono: "Cereza", cantidad: 3, subtotal: 27000 },
+    { referencia: "REF-233", nombre: "Rubor Durazno", tono: null, cantidad: 1, subtotal: 12000 },
+    { referencia: "REF-410", nombre: "Base Mate Natural", tono: null, cantidad: 1, subtotal: 35000 },
   ],
 };
 
@@ -44,5 +48,42 @@ describe("plantillaCorreoPedido", () => {
     });
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("plantillaCorreoPedido — tonos y descuentos", () => {
+  it("muestra el tono elegido para que se pueda despachar sin preguntar", () => {
+    const html = plantillaCorreoPedido(datos);
+    expect(html).toContain("Tono: Cereza");
+  });
+
+  it("no inventa un tono cuando el producto no tiene", () => {
+    const html = plantillaCorreoPedido(datos);
+    const apariciones = html.match(/Tono:/g) ?? [];
+    expect(apariciones).toHaveLength(1);
+  });
+
+  it("desglosa el descuento por porcentaje", () => {
+    const html = plantillaCorreoPedido({
+      ...datos,
+      subtotal: 74000,
+      descuento: 3700,
+      porcentaje: 5,
+      total: 70300,
+    });
+    expect(html).toContain("Descuento 5%");
+    expect(html).toContain("$3.700");
+    expect(html).toContain("$70.300");
+  });
+
+  it("avisa cuando se aplicó el precio por mayor", () => {
+    const html = plantillaCorreoPedido({ ...datos, porMayor: true });
+    expect(html).toContain("Precio por mayor aplicado");
+  });
+
+  it("omite el desglose cuando no hubo ningún beneficio", () => {
+    const html = plantillaCorreoPedido(datos);
+    expect(html).not.toContain("Precio por mayor aplicado");
+    expect(html).not.toContain("Descuento 0%");
   });
 });

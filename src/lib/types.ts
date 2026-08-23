@@ -8,6 +8,13 @@ export type Categoria = {
   categoriaPadreId: string | null;
 };
 
+export type Tono = {
+  id: string;
+  nombre: string;
+  colorHex: string;
+  orden: number;
+};
+
 export type Producto = {
   id: string;
   referencia: string;
@@ -20,11 +27,18 @@ export type Producto = {
   stock: number;
   activo: boolean;
   escalones: Escalon[];
+  tonos: Tono[];
 };
 
-/** Lo que se guarda en el navegador. Nunca incluye precios. */
+/**
+ * Lo que se guarda en el navegador. Nunca incluye precios.
+ * La identidad de una línea es producto + tono: dos tonos del mismo
+ * producto son dos líneas separadas.
+ */
 export type LineaCarrito = {
   productoId: string;
+  tonoId: string | null;
+  tonoNombre: string | null;
   cantidad: number;
 };
 
@@ -34,6 +48,7 @@ export type LineaPedido = {
   id: string;
   referencia: string;
   nombre: string;
+  tono: string | null;
   cantidad: number;
   precioUnitarioAplicado: number;
   subtotal: number;
@@ -45,6 +60,10 @@ export type Pedido = {
   clienteNombre: string;
   clienteWhatsapp: string;
   clienteCiudad: string;
+  subtotal: number;
+  descuento: number;
+  porcentajeDescuento: number;
+  porMayor: boolean;
   total: number;
   estado: EstadoPedido;
   notasAdmin: string | null;

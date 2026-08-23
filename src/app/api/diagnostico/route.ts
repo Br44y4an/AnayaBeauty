@@ -101,11 +101,15 @@ export async function GET(peticion: Request) {
       whatsapp: "3132553660",
       ciudad: "Medellín",
       codigo: "0000",
-      total: 74000,
+      subtotal: 74000,
+      descuento: 3700,
+      porcentaje: 5,
+      porMayor: false,
+      total: 70300,
       lineas: [
-        { referencia: "REF-101", nombre: "Labial Rojo Pasión", cantidad: 3, subtotal: 27000 },
-        { referencia: "REF-233", nombre: "Rubor Durazno", cantidad: 1, subtotal: 12000 },
-        { referencia: "REF-410", nombre: "Base Mate Natural", cantidad: 1, subtotal: 35000 },
+        { referencia: "REF-101", nombre: "Labial Rojo Pasión", tono: "Cereza", cantidad: 3, subtotal: 27000 },
+        { referencia: "REF-233", nombre: "Rubor Durazno", tono: null, cantidad: 1, subtotal: 12000 },
+        { referencia: "REF-410", nombre: "Base Mate Natural", tono: null, cantidad: 1, subtotal: 35000 },
       ],
     });
 

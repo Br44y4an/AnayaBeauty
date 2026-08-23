@@ -63,7 +63,11 @@ export function FormularioConfirmar() {
   }
 
   const itemsSerializados = JSON.stringify(
-    lineas.map((l) => ({ producto_id: l.productoId, cantidad: l.cantidad }))
+    lineas.map((l) => ({
+      producto_id: l.productoId,
+      cantidad: l.cantidad,
+      tono: l.tonoNombre,
+    }))
   );
 
   return (

@@ -62,7 +62,7 @@ export async function confirmarPedido(
   const whatsapp = String(datos.get("whatsapp") ?? "").trim();
   const ciudad = String(datos.get("ciudad") ?? "").trim();
 
-  let items: { producto_id: string; cantidad: number }[];
+  let items: { producto_id: string; cantidad: number; tono?: string | null }[];
   try {
     items = JSON.parse(String(datos.get("items") ?? "[]"));
   } catch {
@@ -95,7 +95,7 @@ export async function confirmarPedido(
   // pedido ya está guardado; enviarCorreoPedido nunca lanza.
   const { data: lineas } = await supabase
     .from("order_items")
-    .select("referencia_snapshot, nombre_snapshot, cantidad, subtotal")
+    .select("referencia_snapshot, nombre_snapshot, tono_snapshot, cantidad, subtotal")
     .eq("order_id", pedidoId);
 
   await enviarCorreoPedido({
@@ -104,10 +104,15 @@ export async function confirmarPedido(
     whatsapp,
     ciudad,
     codigo,
+    subtotal: (data.subtotal ?? data.total) as number,
+    descuento: (data.descuento ?? 0) as number,
+    porcentaje: (data.porcentaje ?? 0) as number,
+    porMayor: (data.por_mayor ?? false) as boolean,
     total: data.total as number,
     lineas: (lineas ?? []).map((l) => ({
       referencia: l.referencia_snapshot,
       nombre: l.nombre_snapshot,
+      tono: l.tono_snapshot ?? null,
       cantidad: l.cantidad,
       subtotal: l.subtotal,
     })),

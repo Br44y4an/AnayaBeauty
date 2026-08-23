@@ -62,7 +62,10 @@ export default async function PaginaPedido({
             <li key={l.id} className="flex justify-between gap-2 text-sm">
               <span className="min-w-0">
                 <span className="text-[11px] font-bold text-lila">{l.referencia}</span>{" "}
-                {l.nombre}{" "}
+                {l.nombre}
+                {l.tono && (
+                  <span className="font-semibold text-lila"> · {l.tono}</span>
+                )}{" "}
                 <span className="text-carbon-suave">x{l.cantidad}</span>
               </span>
               <span className="shrink-0 font-semibold text-carbon">{pesos(l.subtotal)}</span>
@@ -70,9 +73,33 @@ export default async function PaginaPedido({
           ))}
         </ul>
 
-        <div className="flex justify-between border-t border-rosa-nube pt-3">
-          <span className="font-display text-lg text-carbon">Total</span>
-          <span className="font-display text-xl text-fucsia">{pesos(pedido.total)}</span>
+        <div className="space-y-1 border-t border-rosa-nube pt-3">
+          {(pedido.porMayor || pedido.porcentajeDescuento > 0) && (
+            <>
+              <div className="flex justify-between text-sm text-carbon-suave">
+                <span>Subtotal</span>
+                <span>{pesos(pedido.subtotal)}</span>
+              </div>
+
+              {pedido.porMayor && (
+                <p className="text-sm font-semibold text-lila">
+                  🎉 ¡Te aplicamos precio por mayor!
+                </p>
+              )}
+
+              {pedido.porcentajeDescuento > 0 && (
+                <div className="flex justify-between text-sm font-semibold text-lila">
+                  <span>Descuento {pedido.porcentajeDescuento}%</span>
+                  <span>−{pesos(pedido.descuento)}</span>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-between pt-1">
+            <span className="font-display text-lg text-carbon">Total</span>
+            <span className="font-display text-xl text-fucsia">{pesos(pedido.total)}</span>
+          </div>
         </div>
       </div>
 

@@ -4,9 +4,10 @@ import type { Pedido, EstadoPedido } from "@/lib/types";
 
 const CAMPOS_PEDIDO = `
   id, numero_pedido, cliente_nombre, cliente_whatsapp, cliente_ciudad,
+  subtotal, descuento, porcentaje_descuento, por_mayor,
   total, estado, notas_admin, created_at,
   access_codes!orders_code_id_fkey ( code ),
-  order_items ( id, referencia_snapshot, nombre_snapshot, cantidad,
+  order_items ( id, referencia_snapshot, nombre_snapshot, tono_snapshot, cantidad,
                 precio_unitario_aplicado, subtotal )
 `;
 
@@ -16,6 +17,10 @@ type FilaPedido = {
   cliente_nombre: string;
   cliente_whatsapp: string;
   cliente_ciudad: string;
+  subtotal: number;
+  descuento: number;
+  porcentaje_descuento: number;
+  por_mayor: boolean;
   total: number;
   estado: EstadoPedido;
   notas_admin: string | null;
@@ -26,6 +31,7 @@ type FilaPedido = {
         id: string;
         referencia_snapshot: string;
         nombre_snapshot: string;
+        tono_snapshot: string | null;
         cantidad: number;
         precio_unitario_aplicado: number;
         subtotal: number;
@@ -42,6 +48,10 @@ function mapearPedido(fila: FilaPedido): Pedido {
     clienteNombre: fila.cliente_nombre,
     clienteWhatsapp: fila.cliente_whatsapp,
     clienteCiudad: fila.cliente_ciudad,
+    subtotal: fila.subtotal ?? fila.total,
+    descuento: fila.descuento ?? 0,
+    porcentajeDescuento: fila.porcentaje_descuento ?? 0,
+    porMayor: fila.por_mayor ?? false,
     total: fila.total,
     estado: fila.estado,
     notasAdmin: fila.notas_admin,
@@ -51,6 +61,7 @@ function mapearPedido(fila: FilaPedido): Pedido {
       id: l.id,
       referencia: l.referencia_snapshot,
       nombre: l.nombre_snapshot,
+      tono: l.tono_snapshot ?? null,
       cantidad: l.cantidad,
       precioUnitarioAplicado: l.precio_unitario_aplicado,
       subtotal: l.subtotal,

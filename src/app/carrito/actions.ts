@@ -1,7 +1,7 @@
 "use server";
 
 import { crearClienteServidor } from "@/lib/supabase/server";
-import { mapearProducto, type FilaProducto } from "@/lib/data/catalog";
+import { mapearProducto, obtenerConfiguracionDePrecios, type FilaProducto } from "@/lib/data/catalog";
 import type { Producto } from "@/lib/types";
 
 export async function cargarProductosDelCarrito(ids: string[]): Promise<Producto[]> {
@@ -15,7 +15,8 @@ export async function cargarProductosDelCarrito(ids: string[]): Promise<Producto
       id, referencia, nombre, descripcion, category_id,
       imagen_principal, galeria, stock, activo,
       categories ( nombre ),
-      price_tiers ( min_cantidad, precio_unitario )
+      price_tiers ( min_cantidad, precio_unitario ),
+      product_shades ( id, nombre, color_hex, orden )
     `
     )
     .in("id", ids)
@@ -23,4 +24,8 @@ export async function cargarProductosDelCarrito(ids: string[]): Promise<Producto
 
   if (error) throw new Error(`No se pudo cargar el carrito: ${error.message}`);
   return (data as unknown as FilaProducto[]).map(mapearProducto);
+}
+
+export async function cargarConfiguracionPrecios() {
+  return obtenerConfiguracionDePrecios();
 }

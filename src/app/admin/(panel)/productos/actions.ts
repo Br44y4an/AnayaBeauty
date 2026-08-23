@@ -117,6 +117,30 @@ export async function guardarProducto(
 
   if (errorEscalones) return { ok: false, error: errorEscalones.message };
 
+  // Tonos: llegan como listas paralelas de nombre y color
+  const nombresTono = datos.getAll("tono_nombre").map((v) => String(v).trim());
+  const coloresTono = datos.getAll("tono_color").map((v) => String(v));
+
+  const tonos = nombresTono
+    .map((nombre, i) => ({ nombre, color_hex: coloresTono[i] ?? "#E5308A", orden: i }))
+    .filter((t) => t.nombre.length > 0);
+
+  const nombresRepetidos =
+    new Set(tonos.map((t) => t.nombre.toLowerCase())).size !== tonos.length;
+
+  if (nombresRepetidos)
+    return { ok: false, error: "Hay dos tonos con el mismo nombre." };
+
+  await supabase.from("product_shades").delete().eq("product_id", productoId);
+
+  if (tonos.length > 0) {
+    const { error: errorTonos } = await supabase
+      .from("product_shades")
+      .insert(tonos.map((t) => ({ ...t, product_id: productoId })));
+
+    if (errorTonos) return { ok: false, error: errorTonos.message };
+  }
+
   revalidatePath("/admin/productos");
   revalidatePath("/");
   return { ok: true, id: productoId };
@@ -163,4 +187,60 @@ export async function eliminarCategoria(id: string) {
 
   revalidatePath("/admin/categorias");
   revalidatePath("/");
+}
+
+export async function guardarReglaDescuento(datos: FormData) {
+  const supabase = await crearClienteServidor();
+
+  const montoMinimo = Number(datos.get("monto_minimo") ?? 0);
+  const porcentaje = Number(datos.get("porcentaje") ?? 0);
+
+  if (!Number.isInteger(montoMinimo) || montoMinimo <= 0) return;
+  if (!Number.isInteger(porcentaje) || porcentaje <= 0 || porcentaje > 100) return;
+
+  await supabase
+    .from("discount_rules")
+    .upsert(
+      { monto_minimo: montoMinimo, porcentaje, activo: true },
+      { onConflict: "monto_minimo" }
+    );
+
+  revalidatePath("/admin/descuentos");
+  revalidatePath("/carrito");
+}
+
+export async function alternarReglaDescuento(id: string, activo: boolean) {
+  const supabase = await crearClienteServidor();
+  await supabase.from("discount_rules").update({ activo }).eq("id", id);
+
+  revalidatePath("/admin/descuentos");
+  revalidatePath("/carrito");
+}
+
+export async function eliminarReglaDescuento(id: string) {
+  const supabase = await crearClienteServidor();
+  await supabase.from("discount_rules").delete().eq("id", id);
+
+  revalidatePath("/admin/descuentos");
+  revalidatePath("/carrito");
+}
+
+export async function guardarUmbralPorMayor(datos: FormData) {
+  const supabase = await crearClienteServidor();
+
+  const umbral = Number(datos.get("umbral_por_mayor") ?? 0);
+  if (!Number.isInteger(umbral) || umbral <= 0) return;
+
+  await supabase.from("store_settings").upsert(
+    {
+      clave: "umbral_por_mayor",
+      valor: String(umbral),
+      publico: true,
+      actualizado_en: new Date().toISOString(),
+    },
+    { onConflict: "clave" }
+  );
+
+  revalidatePath("/admin/descuentos");
+  revalidatePath("/carrito");
 }

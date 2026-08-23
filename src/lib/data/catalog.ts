@@ -1,15 +1,18 @@
 import { crearClienteServidor } from "@/lib/supabase/server";
 import { precioDesde } from "@/lib/pricing";
 import type { Producto, Categoria } from "@/lib/types";
+import type { ReglaDescuento } from "@/lib/discounts";
 
 const CAMPOS_PRODUCTO = `
   id, referencia, nombre, descripcion, category_id,
   imagen_principal, galeria, stock, activo,
   categories ( nombre ),
-  price_tiers ( min_cantidad, precio_unitario )
+  price_tiers ( min_cantidad, precio_unitario ),
+  product_shades ( id, nombre, color_hex, orden )
 `;
 
 type FilaEscalon = { min_cantidad: number; precio_unitario: number };
+type FilaTono = { id: string; nombre: string; color_hex: string; orden: number };
 
 export type FilaProducto = {
   id: string;
@@ -23,6 +26,7 @@ export type FilaProducto = {
   stock: number;
   activo: boolean;
   price_tiers: FilaEscalon[] | null;
+  product_shades?: FilaTono[] | null;
 };
 
 export function mapearProducto(fila: FilaProducto): Producto {
@@ -42,6 +46,14 @@ export function mapearProducto(fila: FilaProducto): Producto {
     escalones: (fila.price_tiers ?? [])
       .map((e) => ({ minCantidad: e.min_cantidad, precioUnitario: e.precio_unitario }))
       .sort((a, b) => a.minCantidad - b.minCantidad),
+    tonos: (fila.product_shades ?? [])
+      .map((t) => ({
+        id: t.id,
+        nombre: t.nombre,
+        colorHex: t.color_hex,
+        orden: t.orden,
+      }))
+      .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)),
   };
 }
 
@@ -127,4 +139,35 @@ export async function obtenerConfiguracionPublica(): Promise<Record<string, stri
     .select("clave, valor")
     .eq("publico", true);
   return Object.fromEntries((data ?? []).map((f) => [f.clave, f.valor]));
+}
+
+/** Reglas de descuento activas, ordenadas de mayor a menor monto. */
+export async function obtenerReglasDescuento(): Promise<ReglaDescuento[]> {
+  const supabase = await crearClienteServidor();
+  const { data } = await supabase
+    .from("discount_rules")
+    .select("monto_minimo, porcentaje")
+    .eq("activo", true)
+    .order("monto_minimo", { ascending: false });
+
+  return (data ?? []).map((r) => ({
+    montoMinimo: r.monto_minimo,
+    porcentaje: r.porcentaje,
+  }));
+}
+
+/** Todo lo que el carrito necesita para calcular totales igual que el servidor. */
+export async function obtenerConfiguracionDePrecios(): Promise<{
+  reglas: ReglaDescuento[];
+  umbralPorMayor: number;
+}> {
+  const [reglas, config] = await Promise.all([
+    obtenerReglasDescuento(),
+    obtenerConfiguracionPublica(),
+  ]);
+
+  return {
+    reglas,
+    umbralPorMayor: Number(config.umbral_por_mayor ?? 200000),
+  };
 }

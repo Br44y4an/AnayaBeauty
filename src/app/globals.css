@@ -58,3 +58,8 @@ h3 {
 html {
   overscroll-behavior-y: contain;
 }
+
+@keyframes aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

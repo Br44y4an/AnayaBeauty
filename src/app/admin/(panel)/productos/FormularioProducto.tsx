@@ -15,6 +15,7 @@ const CAMPO =
   "outline-none transition duration-200 focus:border-fucsia";
 
 type FilaEscalon = { minCantidad: number; precioUnitario: number };
+type FilaTono = { nombre: string; colorHex: string };
 
 export function FormularioProducto({
   producto,
@@ -33,6 +34,10 @@ export function FormularioProducto({
   const [imagen, setImagen] = useState(producto?.imagenPrincipal ?? "");
   const [subiendo, setSubiendo] = useState(false);
   const [errorImagen, setErrorImagen] = useState<string | null>(null);
+
+  const [tonos, setTonos] = useState<FilaTono[]>(
+    producto?.tonos.map((t) => ({ nombre: t.nombre, colorHex: t.colorHex })) ?? []
+  );
 
   const [escalones, setEscalones] = useState<FilaEscalon[]>(
     producto?.escalones.length
@@ -263,6 +268,74 @@ export function FormularioProducto({
             </ul>
           </div>
         )}
+      </fieldset>
+
+      {/* Tonos de color */}
+      <fieldset className="space-y-3 rounded-tarjeta bg-petalo p-4 shadow-petalo">
+        <legend className="px-1 text-sm font-semibold text-carbon">
+          Tonos de color
+        </legend>
+
+        <p className="text-xs text-carbon-suave">
+          Solo para productos que se venden en varios tonos, como labiales o
+          sombras. Si agregas tonos, la clienta <strong>tendrá que elegir uno</strong>{" "}
+          antes de poder comprar. Déjalo vacío para brochas, esponjas y demás.
+        </p>
+
+        {tonos.map((t, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2">
+            <input
+              type="color"
+              name="tono_color"
+              value={t.colorHex}
+              onChange={(ev) =>
+                setTonos((p) =>
+                  p.map((x, j) => (j === i ? { ...x, colorHex: ev.target.value } : x))
+                )
+              }
+              aria-label={`Color del tono ${i + 1}`}
+              className="h-11 w-14 cursor-pointer rounded-suave border-2 border-lila-suave bg-petalo"
+            />
+
+            <input
+              name="tono_nombre"
+              value={t.nombre}
+              placeholder="Cereza"
+              onChange={(ev) =>
+                setTonos((p) =>
+                  p.map((x, j) => (j === i ? { ...x, nombre: ev.target.value } : x))
+                )
+              }
+              className="min-h-[44px] flex-1 rounded-suave border-2 border-lila-suave
+                         bg-petalo px-4 outline-none focus:border-fucsia"
+            />
+
+            <span
+              style={{ backgroundColor: t.colorHex }}
+              className="h-9 w-9 shrink-0 rounded-full ring-1 ring-black/10"
+              aria-hidden="true"
+            />
+
+            <button
+              type="button"
+              onClick={() => setTonos((p) => p.filter((_, j) => j !== i))}
+              className="min-h-[40px] cursor-pointer px-2 text-xs text-carbon-suave
+                         underline transition hover:text-fucsia"
+            >
+              quitar
+            </button>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setTonos((p) => [...p, { nombre: "", colorHex: "#E5308A" }])}
+          className="inline-flex min-h-[40px] cursor-pointer items-center gap-1
+                     rounded-pastilla border-2 border-lila-suave px-4 text-sm
+                     font-semibold text-lila transition hover:border-lila"
+        >
+          <IconoMas className="h-4 w-4" /> Agregar tono
+        </button>
       </fieldset>
 
       <label className="flex cursor-pointer items-center gap-2">
