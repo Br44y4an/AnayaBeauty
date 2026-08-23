@@ -110,6 +110,45 @@ Para borrar los productos de ejemplo, ábrelos y desmarca "Visible en el catálo
 
 ---
 
+## Tonos de color
+
+Para productos que se venden en varios tonos (labiales, sombras, bases), abre
+el producto en `/admin/productos` y usa la sección **Tonos de color**: eliges el
+color con el selector y le pones nombre («Cereza»).
+
+Si un producto tiene tonos, la clienta **no puede comprarlo sin elegir uno**.
+El tono viaja hasta el correo y el panel, así que despachas sin preguntar nada
+por chat.
+
+El stock es del producto completo, no de cada tono. Si tienes 10 labiales y
+alguien pide 5 «Cereza» y 3 «Vino», el sistema sabe que van 8 de 10.
+
+## Descuentos
+
+En `/admin/descuentos` manejas dos cosas:
+
+**Precio por mayor.** Cuando un pedido llega al monto que definas (arranca en
+$200.000), todos los productos pasan a su precio más barato, sin importar
+cuántas unidades lleve de cada uno.
+
+**Descuento por porcentaje.** Reglas del tipo «desde $50.000 → 5%». Puedes
+agregar las que quieras; si una clienta alcanza varias, se le aplica la de
+mayor monto.
+
+Los dos se suman, en este orden:
+
+```
+1. Se suman los productos con su precio según la cantidad
+2. Si llega al umbral → todo al precio más barato
+3. Sobre ese resultado → el porcentaje que corresponda
+```
+
+Ejemplo real, verificado: un carrito de $200.000 activa el por mayor y baja a
+$196.000; encima se le aplica el 5% y queda en **$186.200**.
+
+El umbral se mide **antes** de rebajar. Una vez aplicado el por mayor no se
+quita, aunque el total quede por debajo del umbral.
+
 ## Cómo se usa en cada transmisión
 
 **Antes de empezar:** abre dos pestañas, `/admin` (pedidos) y `/admin/codigos`.
@@ -131,9 +170,16 @@ Para borrar los productos de ejemplo, ábrelos y desmarca "Visible en el catálo
 ## Si algo falla
 
 **No llegan los correos**
-Revisa que la cuenta de Resend esté registrada con `anayabeauty54@gmail.com` y
-que `RESEND_API_KEY` esté bien puesta en Vercel. Si pasaste de 100 correos hoy,
-espera a mañana: los pedidos siguen llegando al panel igual.
+Corre esto y te dirá exactamente qué está mal:
+
+```bash
+curl -H "x-clave-diagnostico: anaya-diag-8f3k92mz"   "https://anaya-beauty-tau.vercel.app/api/diagnostico?correo=1"
+```
+
+La causa más común: la cuenta de Resend se creó con otro correo. El plan
+gratuito **solo envía a la dirección con la que te registraste**, así que la
+cuenta tiene que ser de `anayabeauty54@gmail.com`. Si pasaste de 100 correos
+hoy, espera a mañana: los pedidos siguen llegando al panel igual.
 
 **Una clienta dice que su código no funciona**
 Búscalo en `/admin/codigos`. Si dice "Usado", ya lo gastó. Si dice "Vencido",
