@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Anaya Beauty — Catálogo digital
 
-## Getting Started
+Catálogo de maquillaje con pedidos por código de un solo uso, pensado para
+vender en transmisiones en vivo de TikTok.
 
-First, run the development server:
+Las clientas entran por un QR, arman su pedido con precios que bajan según la
+cantidad, y lo confirman con un código de 4 dígitos que la administradora
+entrega por WhatsApp solo tras verificar el pago. Cada pedido llega al panel en
+tiempo real y por correo.
+
+**Guía de puesta en marcha:** [SETUP.md](SETUP.md)
+**Diseño y decisiones:** [docs/superpowers/specs/](docs/superpowers/specs/)
+
+## Stack
+
+Next.js 16 · TypeScript · Tailwind 4 · Supabase (Postgres, Auth, Storage,
+Realtime) · Resend · Vitest. Todo en capa gratuita.
+
+## Arranque local
 
 ```bash
+npm install
+cp .env.example .env.local     # y completa los valores
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Pruebas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test            # 56 pruebas: precios, carrito, CSV, correo, formato
+npm run build       # verificación de tipos y compilación
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+La lógica de negocio en la base de datos se verifica ejecutando
+`supabase/tests.sql` en el editor SQL de Supabase: 9 comprobaciones que cubren
+códigos reusados, stock insuficiente, cancelaciones y fuerza bruta.
 
-## Learn More
+## Cómo está organizado
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/lib/pricing.ts        Motor de precios por escalones (función pura)
+src/lib/cart.ts           Carrito persistente en el navegador
+src/lib/data/             Consultas a la base de datos
+src/lib/email/            Plantilla y envío del aviso de pedido
+src/app/                  Pantallas públicas y panel
+supabase/                 Esquema, seguridad, funciones y pruebas SQL
+scripts/                  Utilidades: sembrar datos, crear admin, probar flujo
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Las dos reglas que sostienen el sistema
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**El precio nunca lo decide el navegador.** El carrito solo guarda pares de
+producto y cantidad. El total se recalcula en PostgreSQL al confirmar, leyendo
+los escalones desde la base. Un carrito manipulado no puede cambiar lo que se
+cobra.
 
-## Deploy on Vercel
+**Confirmar un pedido es una sola operación indivisible.** Validar el código,
+verificar el stock, calcular precios, descontar inventario, guardar el pedido y
+quemar el código ocurren juntos o no ocurren. Si falla el stock, el código no se
+gasta y el inventario no se mueve.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts útiles
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+node --env-file=.env.local scripts/crear-admin.mjs correo@ejemplo.com "clave"
+node --env-file=.env.local scripts/sembrar-ejemplo.mjs
+node --env-file=.env.local scripts/probar-flujo.mjs
+```
