@@ -5,7 +5,7 @@ import type { Pedido, EstadoPedido } from "@/lib/types";
 const CAMPOS_PEDIDO = `
   id, numero_pedido, cliente_nombre, cliente_whatsapp, cliente_ciudad,
   total, estado, notas_admin, created_at,
-  access_codes ( code ),
+  access_codes!orders_code_id_fkey ( code ),
   order_items ( id, referencia_snapshot, nombre_snapshot, cantidad,
                 precio_unitario_aplicado, subtotal )
 `;
