@@ -7,7 +7,7 @@ export async function listarCodigos(): Promise<Codigo[]> {
 
   const { data, error } = await supabase
     .from("access_codes")
-    .select("id, code, estado, vence_en, created_at, usado_en, nota, orders ( numero_pedido )")
+    .select("id, code, estado, vence_en, created_at, usado_en, nota, orders!access_codes_order_fk ( numero_pedido )")
     .order("created_at", { ascending: false })
     .limit(100);
 
