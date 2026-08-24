@@ -45,7 +45,7 @@ export function FormularioProducto({
           minCantidad: e.minCantidad,
           precioUnitario: e.precioUnitario,
         }))
-      : [{ minCantidad: 1, precioUnitario: 0 }]
+      : [{ minCantidad: 1, precioUnitario: NaN }]
   );
 
   if (estado?.ok) {
@@ -66,7 +66,8 @@ export function FormularioProducto({
     }
   }
 
-  function actualizar(indice: number, campo: keyof FilaEscalon, valor: number) {
+  function actualizar(indice: number, campo: keyof FilaEscalon, texto: string) {
+    const valor = texto === "" ? NaN : Number(texto);
     setEscalones((previo) =>
       previo.map((e, i) => (i === indice ? { ...e, [campo]: valor } : e))
     );
@@ -198,9 +199,9 @@ export function FormularioProducto({
               name="min_cantidad"
               type="number"
               min={1}
-              value={e.minCantidad}
+              value={Number.isNaN(e.minCantidad) ? "" : e.minCantidad}
               readOnly={i === 0}
-              onChange={(ev) => actualizar(i, "minCantidad", Number(ev.target.value))}
+              onChange={(ev) => actualizar(i, "minCantidad", ev.target.value)}
               className={`w-20 rounded-suave border-2 border-lila-suave px-3 py-2
                           outline-none focus:border-fucsia ${i === 0 ? "bg-rosa-nube" : "bg-petalo"}`}
             />
@@ -211,9 +212,9 @@ export function FormularioProducto({
               name="precio_unitario"
               type="number"
               min={1}
-              step={100}
-              value={e.precioUnitario}
-              onChange={(ev) => actualizar(i, "precioUnitario", Number(ev.target.value))}
+              step={1}
+              value={Number.isNaN(e.precioUnitario) ? "" : e.precioUnitario}
+              onChange={(ev) => actualizar(i, "precioUnitario", ev.target.value)}
               className="w-32 rounded-suave border-2 border-lila-suave bg-petalo px-3 py-2
                          outline-none focus:border-fucsia"
             />
@@ -239,8 +240,8 @@ export function FormularioProducto({
             setEscalones((p) => [
               ...p,
               {
-                minCantidad: Math.max(...p.map((e) => e.minCantidad)) + 2,
-                precioUnitario: 0,
+                minCantidad: Math.max(...p.map((e) => e.minCantidad || 0)) + 2,
+                precioUnitario: NaN,
               },
             ])
           }
