@@ -147,6 +147,8 @@ console.log("\n=== 5. El tono llega hasta la línea del pedido ===");
   ok(lineas.length === 2, "dos tonos = dos líneas separadas");
   ok(lineas[0].tono_snapshot === "Cereza", "primer tono guardado", lineas[0].tono_snapshot);
   ok(lineas[1].tono_snapshot === "Vino", "segundo tono guardado", lineas[1].tono_snapshot);
+  // 1 + 2 = 3 unidades del mismo producto → las tres al escalón de 3.
+  ok(r.subtotal === 27000, "y las 3 unidades se cobran agrupadas", pesos(r.subtotal));
 }
 
 console.log("\n=== 6. Los tonos comparten el stock del producto ===");
@@ -168,7 +170,48 @@ console.log("\n=== 6. Los tonos comparten el stock del producto ===");
   ok(c.stock === 4, "el stock no se movió tras el rechazo", String(c.stock));
 }
 
-console.log("\n=== 7. El precio sigue sin poder manipularse desde el navegador ===");
+console.log("\n=== 7. Los tonos de un producto suman para elegir el escalón ===");
+{
+  // 2 de Cereza + 1 de Vino = 3 unidades del MISMO producto. Antes cada
+  // línea elegía su escalón por separado y las tres salían a 10.000
+  // ($30.000); ahora las tres alcanzan el escalón de 3 → 9.000 c/u.
+  const r = await pedir([
+    { producto_id: A, cantidad: 2, tono: "Cereza" },
+    { producto_id: A, cantidad: 1, tono: "Vino" },
+  ]);
+
+  ok(r.subtotal === 27000, "3 unidades entre 2 tonos al escalón de 3", pesos(r.subtotal));
+
+  const { data: lineas } = await db
+    .from("order_items")
+    .select("tono_snapshot, cantidad, precio_unitario_aplicado, subtotal")
+    .eq("order_id", r.order_id)
+    .order("cantidad", { ascending: false });
+
+  ok(
+    lineas.every((l) => l.precio_unitario_aplicado === 9000),
+    "los dos tonos quedaron al mismo precio unitario",
+    lineas.map((l) => `${l.tono_snapshot}:${pesos(l.precio_unitario_aplicado)}`).join(" ")
+  );
+  ok(lineas[0].subtotal === 18000, "Cereza x2", pesos(lineas[0].subtotal));
+  ok(lineas[1].subtotal === 9000, "Vino x1", pesos(lineas[1].subtotal));
+}
+
+console.log("\n=== 8. Productos distintos NO suman entre sí ===");
+{
+  // 2 de A + 1 de B: cada producto se queda en su propio escalón de 1.
+  // Es el guardarraíl de que la agrupación no se pase de lista.
+  const r = await pedir([
+    { producto_id: A, cantidad: 2 },
+    { producto_id: B, cantidad: 1 },
+  ]);
+
+  // A: 2 x 10.000 = 20.000 (no alcanza su escalón de 3) ; B: 1 x 20.000
+  ok(r.subtotal === 40000, "cada producto con su propio escalón", pesos(r.subtotal));
+  ok(r.por_mayor === false, "sin por mayor");
+}
+
+console.log("\n=== 9. El precio sigue sin poder manipularse desde el navegador ===");
 {
   const r = await pedir([
     { producto_id: A, cantidad: 1, precio_unitario: 1, subtotal: 1, total: 1 },

@@ -18,12 +18,31 @@ const check = (ok, msg, detalle = "") => {
   if (!ok) fallos++;
 };
 
-// Producto de prueba conocido
+// Producto de prueba propio. Antes esta prueba usaba REF-101 del sembrado de
+// ejemplo, pero dependía de que ese producto siguiera activo en la base: al
+// quedar oculto desde el panel, el flujo entero fallaba con
+// PRODUCTO_NO_DISPONIBLE sin que hubiera nada roto. Ahora la prueba crea y
+// destruye su propio producto, igual que probar-descuentos.mjs.
 const { data: prod } = await db
   .from("products")
+  .upsert(
+    {
+      referencia: "TEST-FLUJO",
+      nombre: "Producto de prueba del flujo",
+      stock: 20,
+      activo: true,
+    },
+    { onConflict: "referencia" }
+  )
   .select("id, nombre, stock")
-  .eq("referencia", "REF-101")
   .single();
+
+await db.from("price_tiers").delete().eq("product_id", prod.id);
+await db.from("price_tiers").insert([
+  { product_id: prod.id, min_cantidad: 1, precio_unitario: 10000 },
+  { product_id: prod.id, min_cantidad: 3, precio_unitario: 9000 },
+  { product_id: prod.id, min_cantidad: 6, precio_unitario: 8000 },
+]);
 
 const stockInicial = prod.stock;
 const codigo = String(Math.floor(1000 + Math.random() * 8999));
@@ -101,6 +120,8 @@ check(final.stock === stockInicial, "cancelar devolvió todo el stock", `${final
 await db.from("order_items").delete().in("order_id", [res.order_id, res2.order_id]);
 await db.from("access_codes").delete().in("code", [codigo, codigo2]);
 await db.from("orders").delete().in("id", [res.order_id, res2.order_id]);
+await db.from("price_tiers").delete().eq("product_id", prod.id);
+await db.from("products").delete().eq("id", prod.id);
 
 console.log(
   `\nURL de la pantalla de éxito para probar a mano:\n  http://localhost:3000/pedido/${res.order_id}`

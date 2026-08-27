@@ -128,6 +128,28 @@ describe("PanelCompra con tonos", () => {
     );
   });
 
+  it("cuenta los tonos ya en la bolsa para elegir el escalón", () => {
+    // Ya hay 2 de un tono: agregar 1 de OTRO tono llega a 3 unidades del
+    // producto, así que esa unidad ya se cobra al precio del escalón de 3.
+    usarCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Cereza" });
+
+    render(<PanelCompra producto={conTonos} />);
+    fireEvent.click(screen.getByRole("radio", { name: "Vino" }));
+
+    expect(screen.getByRole("button", { name: /agregar/i })).toHaveTextContent("$9.000");
+  });
+
+  it("pinta lo que ya está en la bolsa al precio del escalón alcanzado", () => {
+    // 2 de Cereza + 1 de Vino = 3 unidades → las tres a $9.000, así que la
+    // línea de Cereza vale $18.000 y no $20.000.
+    usarCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Cereza" });
+    usarCarrito.getState().agregar("p1", 1, { id: "t2", nombre: "Vino" });
+
+    render(<PanelCompra producto={conTonos} />);
+
+    expect(screen.getByText("$18.000")).toBeInTheDocument();
+  });
+
   it("descuenta del disponible lo que ya está en la bolsa, sumando tonos", () => {
     // stock 10; metemos 8 entre dos tonos, deben quedar 2
     usarCarrito.getState().agregar("p1", 5, { id: "t1", nombre: "Cereza" });

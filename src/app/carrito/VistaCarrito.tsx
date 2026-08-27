@@ -5,8 +5,12 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usarCarrito } from "@/lib/cart";
 import { cargarProductosDelCarrito, cargarConfiguracionPrecios } from "./actions";
-import { precioUnitarioPara, precioDesde } from "@/lib/pricing";
-import { calcularTotales, siguienteBeneficio, type ReglaDescuento } from "@/lib/discounts";
+import {
+  calcularTotales,
+  unitarioDeLinea,
+  siguienteBeneficio,
+  type ReglaDescuento,
+} from "@/lib/discounts";
 import { pesos, enlaceWhatsApp } from "@/lib/format";
 import { Boton } from "@/components/ui/Boton";
 import {
@@ -91,11 +95,15 @@ export function VistaCarrito() {
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 
-  const totales = calcularTotales(
-    detalles.map((d) => ({ escalones: d.producto.escalones, cantidad: d.cantidad })),
-    reglas,
-    umbral
-  );
+  // Los tonos de un producto son líneas distintas pero comparten escalón: el
+  // motor agrupa por `productoId` para decidirlo.
+  const lineasCalculo = detalles.map((d) => ({
+    productoId: d.producto.id,
+    escalones: d.producto.escalones,
+    cantidad: d.cantidad,
+  }));
+
+  const totales = calcularTotales(lineasCalculo, reglas, umbral);
 
   const empujon = siguienteBeneficio(totales.subtotalNormal, reglas, umbral);
 
@@ -107,10 +115,13 @@ export function VistaCarrito() {
   return (
     <div className="space-y-4">
       {detalles.map((d) => {
-        // Con precio por mayor, cada producto baja a su precio más bajo
-        const unitario = totales.porMayor
-          ? precioDesde(d.producto.escalones)
-          : precioUnitarioPara(d.producto.escalones, d.cantidad);
+        // El escalón lo decide el total del producto (todos sus tonos); con
+        // precio por mayor baja a su precio más bajo.
+        const unitario = unitarioDeLinea(
+          { productoId: d.producto.id, escalones: d.producto.escalones, cantidad: d.cantidad },
+          lineasCalculo,
+          totales.porMayor
+        );
 
         const puedeSumar =
           (usadoPorProducto.get(d.producto.id) ?? 0) < d.producto.stock;

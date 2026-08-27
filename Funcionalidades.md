@@ -45,6 +45,9 @@ Función pura, sin imports, para poder ejecutarse en cualquier contexto
 - `Escalon = { minCantidad, precioUnitario }`
 - `precioUnitarioPara(escalones, cantidad)`: toma el escalón más alto cuyo
   mínimo no supera la cantidad pedida.
+  - **La `cantidad` que se le pasa es la del PRODUCTO COMPLETO, sumando todos
+    sus tonos** — no la de una línea suelta. Quién hace esa suma es
+    `discounts.ts` (ver sección 2); `pricing.ts` solo recibe el número.
 - `subtotalPara`: precio unitario × cantidad.
 - `precioDesde`: el precio unitario más bajo configurado (para "desde $X").
 - `sugerenciaUpsell(escalones, cantidad)`: calcula cuánto falta para el
@@ -53,7 +56,16 @@ Función pura, sin imports, para poder ejecutarse en cualquier contexto
 ## 2. Motor de descuentos (`src/lib/discounts.ts`)
 
 Debe coincidir "al peso" con `crear_pedido` en PostgreSQL (verificado por
-`scripts/probar-descuentos.mjs`). Dos beneficios encadenados:
+`scripts/probar-descuentos.mjs`).
+
+**Agrupación por producto (v3):** el escalón de una línea NO lo decide su
+propia cantidad, sino la suma de todas las líneas de ese producto. Los tonos
+de un mismo labial comparten inventario y también comparten escalón: Rojo x2 +
+Nude x1 = 3 unidades, y las tres se cobran al precio del escalón de 3. Antes
+cada tono elegía escalón por separado y un combo repartido entre tonos nunca
+se alcanzaba. Productos distintos NO suman entre sí.
+
+Sobre eso van dos beneficios encadenados:
 
 1. **Precio por mayor**: si el subtotal normal (con escalones normales)
    alcanza un umbral configurable (`store_settings.umbral_por_mayor`, default
@@ -69,9 +81,16 @@ Debe coincidir "al peso" con `crear_pedido` en PostgreSQL (verificado por
 Orden de cálculo: `subtotalNormal` → (¿≥umbral? → precio más bajo por
 producto) → `subtotalBase` → aplicar % → `total`.
 
+- `LineaCalculo = { productoId, escalones, cantidad }` — el `productoId` es lo
+  que permite agrupar los tonos.
 - `calcularTotales(lineas, reglas, umbralPorMayor)` → `Totales` con
   subtotalNormal, subtotalBase, porMayor, porcentaje, descuento, total,
   ahorroTotal.
+- `cantidadesPorProducto(lineas)` → `Map<productoId, unidades>`: la suma que
+  decide el escalón.
+- `unitarioDeLinea(linea, lineas, porMayor)`: precio unitario final de una
+  línea. **Es la función que debe usar la interfaz para pintar precios**, para
+  no reimplementar la regla en cada pantalla.
 - `porcentajeAplicable(subtotal, reglas)`.
 - `siguienteBeneficio(...)`: calcula cuánto le falta al carrito para el
   próximo beneficio ("te faltan $12.000 para el 10%"), usado como empujón de
@@ -103,13 +122,16 @@ clienta **debe** elegir uno antes de poder agregarlo al carrito
 y `aria-label`/nombre en texto, nunca solo color).
 
 - El stock es del producto completo, no por tono — se reparte entre líneas.
+- **El escalón de precio también es del producto completo**: las unidades de
+  todos los tonos suman para decidirlo (ver sección 2).
 - El tono viaja congelado (`tono_snapshot`) hasta `order_items`, el correo y
   el panel admin.
 
 ## 5. Base de datos — Supabase (`supabase/*.sql`)
 
 Ejecutar en orden: `schema.sql` → `policies.sql` → `functions.sql` →
-(`migracion-v2.sql` para tonos/descuentos) → `tests.sql` (9 comprobaciones).
+(`migracion-v2.sql` para tonos/descuentos) → (`migracion-v3.sql` para el
+escalón agrupado por producto) → `tests.sql` (9 comprobaciones).
 Todos idempotentes.
 
 ### Tablas principales
@@ -132,19 +154,23 @@ Todos idempotentes.
 
 ### Funciones (RPC, `security definer`)
 - **`crear_pedido(codigo, nombre, whatsapp, ciudad, items, ip_hash)`** — la
-  función central. Versión v2 (en `migracion-v2.sql`, reemplaza la de
-  `functions.sql`):
+  función central. Versión v3 (en `migracion-v3.sql`, reemplaza la de
+  `migracion-v2.sql`, que a su vez reemplazó la de `functions.sql`):
   1. Rate-limit: máx 5 intentos fallidos por `ip_hash` en 10 min → `DEMASIADOS_INTENTOS`.
   2. Valida carrito no vacío y datos completos.
   3. Bloquea el código (`for update`) → `CODIGO_INVALIDO` / `CODIGO_VENCIDO`.
-  4. Primera pasada: bloquea cada producto (`for update`), valida stock
-     sumando TODAS las líneas de ese producto (tonos comparten inventario) →
-     `SIN_STOCK|nombre|disponible`, calcula `subtotalNormal`.
+  4. Primera pasada: bloquea cada producto (`for update`), suma TODAS las
+     líneas de ese producto (`v_cantidad_producto`, porque los tonos comparten
+     inventario) y valida stock contra esa suma →
+     `SIN_STOCK|nombre|disponible`. Esa misma suma es la que se le pasa a
+     `precio_unitario_para` para elegir el escalón (v3), no la cantidad de la
+     línea suelta. Calcula `subtotalNormal`.
   5. Decide `por_mayor` comparando `subtotalNormal` contra
      `store_settings.umbral_por_mayor` (default 200000).
   6. Crea la fila `orders`.
-  7. Segunda pasada: precio final por línea (más bajo si `por_mayor`, si no
-     normal), descuenta stock, inserta `order_items` con `tono_snapshot`.
+  7. Segunda pasada: precio final por línea (el más bajo si `por_mayor`; si
+     no, el escalón de la cantidad agrupada del producto), descuenta stock,
+     inserta `order_items` con `tono_snapshot`.
   8. Calcula `porcentaje_descuento_para(subtotalBase)` y el `descuento`.
   9. Actualiza `orders` con el desglose completo y quema el código.
   - Errores devueltos como excepciones con código: `CODIGO_INVALIDO`,
@@ -278,14 +304,18 @@ escalones (1 obligatorio, 3 y 6 opcionales).
 - `catalogo/`: `Encabezado` (banner estático), `Buscador` (debounce, actualiza
   querystring), `ChipsCategorias`, `GrillaProductos`, `TarjetaProducto`
   (compra directa desde la tarjeta: selector de tono compacto, +/-, muestra
-  upsell — pensado para minimizar fricción durante un live). El precio que
-  se pinta es siempre `precioUnitarioPara(escalones, 1)` (lo que de verdad
-  cobra "Agregar" la primera vez), nunca `precioDesde` (el más barato del
-  combo) — mostrar ese confundía porque no coincidía con el cobro real.
-  Debajo de los controles de tono, si el producto ya tiene líneas en el
+  upsell — pensado para minimizar fricción durante un live). El precio que se
+  pinta es el que de verdad se está cobrando ahora mismo:
+  `precioUnitarioPara(escalones, max(1, unidadesEnLaBolsa))` — con la bolsa
+  vacía es el de 1 unidad y baja solo al alcanzar un escalón. Nunca
+  `precioDesde` (el más barato del combo): mostrar ese confundía porque no
+  coincidía con el cobro real. Como los tonos suman al mismo escalón, el
+  upsell cuenta el producto completo ("suma 1 más" se cumple con cualquier
+  tono). Debajo de los controles de tono, si el producto ya tiene líneas en el
   carrito, se lista cada tono con su cantidad y subtotal por separado (se
-  perdía de vista al cambiar de tono). `PanelCompra` (detalle de producto)
-  tiene el mismo resumen por tono.
+  perdía de vista al cambiar de tono), todos al precio unitario agrupado.
+  `PanelCompra` (detalle de producto) tiene el mismo resumen por tono y cobra
+  lo que ya está en la bolsa al elegir el escalón de lo que se va a agregar.
 - `producto/`: `PanelCompra` (detalle completo con tabla de escalones),
   `SelectorTonos` (círculos accesibles), `TablaEscalones`, `SelectorCantidad`.
   Tiene test: `__tests__/PanelCompra.test.tsx`.
@@ -315,10 +345,14 @@ escalones (1 obligatorio, 3 y 6 opcionales).
 - `probar-flujo.mjs`: prueba end-to-end contra la base real (crea código,
   hace pedido, verifica stock/número/quemado de código, verifica que el
   precio enviado desde el "cliente" se ignora, cancela y limpia todo).
+  Crea y destruye su propio producto `TEST-FLUJO`: antes usaba `REF-101` del
+  sembrado de ejemplo y fallaba entero con `PRODUCTO_NO_DISPONIBLE` en cuanto
+  ese producto quedaba oculto desde el panel, sin que hubiera nada roto.
 - `probar-descuentos.mjs`: verifica que `crear_pedido` en SQL cobre EXACTAMENTE
-  lo mismo que `discounts.ts` en TypeScript, para 7 escenarios (sin beneficio,
+  lo mismo que `discounts.ts` en TypeScript, para 9 escenarios (sin beneficio,
   %, por mayor + %, no-reversión del por mayor, tonos en snapshot, tonos
-  comparten stock, precio no manipulable). Limpia todo al final.
+  comparten stock, **tonos suman para el escalón**, **productos distintos no
+  suman entre sí**, precio no manipulable). Limpia todo al final.
 - `probar-correo.mjs`: envía un correo de prueba con la plantilla real
   (independiente de la app, para diagnosticar Resend).
 - `probar-mejora-imagen.mjs`: **piloto/experimental**, no toca producción.
@@ -363,7 +397,7 @@ lee y guarda localmente).
 
 ## 16. Pruebas
 
-- `npm test` (Vitest): 56 pruebas sobre `src/lib/` — `pricing`, `discounts`,
+- `npm test` (Vitest): 87 pruebas sobre `src/lib/` — `pricing`, `discounts`,
   `cart`, `csv`, `format`, `slug`, `catalog-mapeo`, `order-template`, más
   `PanelCompra.test.tsx` (componente).
 - `npm run build`: verificación de tipos + compilación.

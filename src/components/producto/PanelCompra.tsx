@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { subtotalPara, sugerenciaUpsell } from "@/lib/pricing";
+import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
 import { usarCarrito, unidadesDeProducto } from "@/lib/cart";
 import { Boton } from "@/components/ui/Boton";
@@ -47,9 +47,17 @@ export function PanelCompra({ producto }: { producto: Producto }) {
   const necesitaTono = producto.tonos.length > 0;
   const puedeAgregar = disponible > 0 && (!necesitaTono || tono !== null);
 
-  const subtotal = subtotalPara(producto.escalones, cantidad);
-  const upsell = sugerenciaUpsell(producto.escalones, cantidad);
-  const puedeLlegarAlUpsell = upsell !== null && upsell.nuevaCantidad <= disponible;
+  // Los tonos comparten escalón: lo que ya está en la bolsa cuenta para el
+  // precio de lo que se va a agregar ahora.
+  const cantidadResultante = yaEnBolsa + cantidad;
+  const unitarioAlAgregar = precioUnitarioPara(producto.escalones, cantidadResultante);
+  const subtotal = unitarioAlAgregar * cantidad;
+
+  // Precio al que están saliendo las unidades que ya tiene en la bolsa.
+  const unitarioEnBolsa = precioUnitarioPara(producto.escalones, Math.max(1, yaEnBolsa));
+
+  const upsell = sugerenciaUpsell(producto.escalones, cantidadResultante);
+  const puedeLlegarAlUpsell = upsell !== null && upsell.nuevaCantidad <= producto.stock;
 
   function alAgregar() {
     agregar(producto.id, cantidad, tono);
@@ -65,7 +73,7 @@ export function PanelCompra({ producto }: { producto: Producto }) {
 
   return (
     <div className="space-y-5">
-      <TablaEscalones escalones={producto.escalones} cantidadActual={cantidad} />
+      <TablaEscalones escalones={producto.escalones} cantidadActual={cantidadResultante} />
 
       {necesitaTono && (
         <div className="rounded-tarjeta bg-petalo p-4 shadow-petalo">
@@ -134,7 +142,7 @@ export function PanelCompra({ producto }: { producto: Producto }) {
                   {l.tonoNombre ?? "Sin tono"} · x{l.cantidad}
                 </span>
                 <span className="shrink-0 font-semibold text-fucsia">
-                  {pesos(subtotalPara(producto.escalones, l.cantidad))}
+                  {pesos(unitarioEnBolsa * l.cantidad)}
                 </span>
               </li>
             ))}

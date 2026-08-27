@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { precioUnitarioPara, subtotalPara, sugerenciaUpsell } from "@/lib/pricing";
+import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
 import { usarCarrito, unidadesDeProducto } from "@/lib/cart";
 import { Insignia } from "@/components/ui/Insignia";
@@ -31,14 +31,8 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
   const quedaPoco = producto.stock > 0 && producto.stock <= 5;
   const tieneCombo = producto.escalones.length > 1;
   const necesitaTono = producto.tonos.length > 0;
-  // Precio de 1 unidad: es el que se cobra al tocar "Agregar" la primera vez,
-  // así que es el único que tiene sentido pintar en la tarjeta (mostrar el
-  // precio más bajo del combo confundía, porque no era lo que se cobraba).
-  const precioUnidad = producto.escalones.length
-    ? precioUnitarioPara(producto.escalones, 1)
-    : null;
-
-  // Los tonos comparten inventario: cuenta todo lo del producto en la bolsa
+  // Los tonos comparten inventario Y escalón de precio: todo lo del producto
+  // en la bolsa cuenta junto, sin importar cómo esté repartido entre tonos.
   const yaEnBolsa = unidadesDeProducto(lineas, producto.id);
   const lineasDeEsteProducto = lineas.filter((l) => l.productoId === producto.id);
   const tonoId = tono?.id ?? null;
@@ -46,10 +40,17 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
     lineas.find((l) => l.productoId === producto.id && l.tonoId === tonoId)?.cantidad ?? 0;
   const puedeSumar = yaEnBolsa < producto.stock;
 
+  // El precio que se pinta es el que de verdad se está cobrando ahora mismo:
+  // con la bolsa vacía es el de 1 unidad, y baja solo al alcanzar un escalón.
+  const unitarioActual = producto.escalones.length
+    ? precioUnitarioPara(producto.escalones, Math.max(1, yaEnBolsa))
+    : null;
+
+  // El empujón cuenta el producto completo: "suma 1 más" puede cumplirse
+  // agregando cualquier tono, porque todos suman al mismo escalón.
   const upsell =
-    enEstaLinea > 0 ? sugerenciaUpsell(producto.escalones, enEstaLinea) : null;
-  const upsellAlcanzable =
-    upsell !== null && upsell.nuevaCantidad <= producto.stock - (yaEnBolsa - enEstaLinea);
+    yaEnBolsa > 0 ? sugerenciaUpsell(producto.escalones, yaEnBolsa) : null;
+  const upsellAlcanzable = upsell !== null && upsell.nuevaCantidad <= producto.stock;
 
   function sumar() {
     if (!puedeSumar) return;
@@ -133,9 +134,9 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
             </Link>
           </div>
 
-          {precioUnidad !== null && (
+          {unitarioActual !== null && (
             <p className="text-base font-bold text-fucsia">
-              {pesos(precioUnidad)}
+              {pesos(unitarioActual)}
               <span className="text-[11px] font-normal text-carbon-suave"> c/u</span>
             </p>
           )}
@@ -194,7 +195,7 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
                   </div>
 
                   <p className="text-center text-sm font-bold text-fucsia">
-                    {pesos(subtotalPara(producto.escalones, enEstaLinea))}
+                    {pesos((unitarioActual ?? 0) * enEstaLinea)}
                   </p>
 
                   {upsellAlcanzable && (
@@ -221,7 +222,7 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
                         {l.tonoNombre ?? "Sin tono"} · x{l.cantidad}
                       </span>
                       <span className="shrink-0 font-semibold text-fucsia">
-                        {pesos(subtotalPara(producto.escalones, l.cantidad))}
+                        {pesos((unitarioActual ?? 0) * l.cantidad)}
                       </span>
                     </li>
                   ))}

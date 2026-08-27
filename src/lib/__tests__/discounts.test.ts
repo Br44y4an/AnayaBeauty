@@ -22,7 +22,16 @@ const REGLAS_ESCALONADAS: ReglaDescuento[] = [
 
 const UMBRAL = 200000;
 
-const linea = (escalones: Escalon[], cantidad: number): LineaCalculo => ({
+// Sin `productoId` explícito cada línea es un producto distinto, que es lo
+// que asumen las pruebas de abajo. Las que verifican la agrupación por tonos
+// pasan el mismo id a propósito.
+let contador = 0;
+const linea = (
+  escalones: Escalon[],
+  cantidad: number,
+  productoId = `auto-${++contador}`
+): LineaCalculo => ({
+  productoId,
   escalones,
   cantidad,
 });
@@ -42,6 +51,54 @@ describe("calcularTotales — sin beneficios", () => {
     const t = calcularTotales([], REGLA_5, UMBRAL);
     expect(t.total).toBe(0);
     expect(t.subtotalNormal).toBe(0);
+  });
+});
+
+describe("calcularTotales — los tonos de un producto suman para el escalón", () => {
+  it("dos tonos del mismo producto alcanzan juntos el escalón", () => {
+    // Rojo x2 + Nude x1 = 3 unidades del MISMO producto → escalón de 3
+    // (9.000 c/u), no dos líneas sueltas al precio de 1 unidad.
+    const t = calcularTotales(
+      [linea(A, 2, "labial"), linea(A, 1, "labial")],
+      [],
+      UMBRAL
+    );
+
+    expect(t.subtotalNormal).toBe(27000);
+  });
+
+  it("productos distintos NO suman entre sí para el escalón", () => {
+    // 2 de un producto + 1 de otro: cada uno se queda en su escalón de 1.
+    const t = calcularTotales(
+      [linea(A, 2, "labial"), linea(A, 1, "sombra")],
+      [],
+      UMBRAL
+    );
+
+    expect(t.subtotalNormal).toBe(30000);
+  });
+
+  it("cada tono aporta su propia cantidad al precio del escalón compartido", () => {
+    // 4 + 2 = 6 unidades → escalón de 6 (8.000 c/u) para las seis.
+    const t = calcularTotales(
+      [linea(A, 4, "labial"), linea(A, 2, "labial")],
+      [],
+      UMBRAL
+    );
+
+    expect(t.subtotalNormal).toBe(48000);
+  });
+
+  it("una línea inválida no cuenta para el escalón de sus hermanas", () => {
+    // La línea con cantidad 0 se descarta antes de agrupar: quedan 2
+    // unidades, que no alcanzan el escalón de 3.
+    const t = calcularTotales(
+      [linea(A, 2, "labial"), linea(A, 0, "labial")],
+      [],
+      UMBRAL
+    );
+
+    expect(t.subtotalNormal).toBe(20000);
   });
 });
 

@@ -3,7 +3,12 @@ import { precioUnitarioPara, precioDesde, type Escalon } from "@/lib/pricing";
 /**
  * Motor de descuentos por monto.
  *
- * Dos beneficios encadenados:
+ * El escalón de cada línea NO lo decide su propia cantidad, sino la suma de
+ * todas las líneas de ese producto: los tonos de un mismo labial comparten
+ * inventario y también comparten escalón. Rojo x2 + Nude x1 = 3 unidades, y
+ * las tres se cobran al precio del escalón de 3.
+ *
+ * Sobre eso van dos beneficios encadenados:
  *
  *   1. PRECIO POR MAYOR — si el carrito alcanza el umbral, cada producto pasa
  *      a su precio unitario más bajo, sin importar cuántas unidades lleve.
@@ -19,6 +24,8 @@ export type ReglaDescuento = {
 };
 
 export type LineaCalculo = {
+  /** Agrupa las líneas del mismo producto: sus tonos comparten escalón. */
+  productoId: string;
   escalones: Escalon[];
   cantidad: number;
 };
@@ -40,15 +47,49 @@ function esLineaValida(l: LineaCalculo): boolean {
   return l.escalones.length > 0 && Number.isInteger(l.cantidad) && l.cantidad >= 1;
 }
 
+/**
+ * Unidades de cada producto en el carrito, sumando todas sus líneas.
+ * Es la cantidad que decide el escalón, no la de la línea suelta.
+ */
+export function cantidadesPorProducto(lineas: LineaCalculo[]): Map<string, number> {
+  const cantidades = new Map<string, number>();
+  for (const l of lineas.filter(esLineaValida)) {
+    cantidades.set(l.productoId, (cantidades.get(l.productoId) ?? 0) + l.cantidad);
+  }
+  return cantidades;
+}
+
+/**
+ * Precio unitario final de una línea: el escalón lo decide el total del
+ * producto (todos sus tonos) y, si hay precio por mayor, se reemplaza por el
+ * más bajo configurado. Es la función que debe usar la interfaz para pintar
+ * precios, para no reimplementar la regla en cada pantalla.
+ */
+export function unitarioDeLinea(
+  linea: LineaCalculo,
+  lineas: LineaCalculo[],
+  porMayor: boolean
+): number {
+  if (porMayor) return precioDesde(linea.escalones);
+
+  const cantidad = cantidadesPorProducto(lineas).get(linea.productoId) ?? linea.cantidad;
+  return precioUnitarioPara(linea.escalones, cantidad);
+}
+
 export function calcularTotales(
   lineas: LineaCalculo[],
   reglas: ReglaDescuento[],
   umbralPorMayor: number
 ): Totales {
   const validas = lineas.filter(esLineaValida);
+  const cantidades = cantidadesPorProducto(validas);
 
+  // El escalón sale del total del producto; el aporte de cada línea al
+  // subtotal es su propia cantidad a ese precio compartido.
   const subtotalNormal = validas.reduce(
-    (suma, l) => suma + precioUnitarioPara(l.escalones, l.cantidad) * l.cantidad,
+    (suma, l) =>
+      suma +
+      precioUnitarioPara(l.escalones, cantidades.get(l.productoId) ?? l.cantidad) * l.cantidad,
     0
   );
 

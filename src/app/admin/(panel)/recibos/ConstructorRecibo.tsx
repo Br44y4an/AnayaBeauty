@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { precioUnitarioPara, precioDesde, subtotalPara } from "@/lib/pricing";
-import { calcularTotales, type ReglaDescuento } from "@/lib/discounts";
+import { precioUnitarioPara } from "@/lib/pricing";
+import { calcularTotales, unitarioDeLinea, type ReglaDescuento } from "@/lib/discounts";
 import { pesos } from "@/lib/format";
 import { descargarReciboPDF, type LineaRecibo } from "@/lib/pdf/recibo";
 import { Boton } from "@/components/ui/Boton";
@@ -132,16 +132,22 @@ export function ConstructorRecibo({
     })
     .filter((d): d is { linea: LineaManual; producto: Producto } => d !== null);
 
-  const totalesManual = calcularTotales(
-    detallesManual.map((d) => ({ escalones: d.producto.escalones, cantidad: d.linea.cantidad })),
-    reglas,
-    umbralPorMayor
-  );
+  // Mismo criterio que el carrito: los tonos de un producto suman para elegir
+  // el escalón, así que el recibo manual cobra igual que la tienda.
+  const lineasCalculoManual = detallesManual.map((d) => ({
+    productoId: d.producto.id,
+    escalones: d.producto.escalones,
+    cantidad: d.linea.cantidad,
+  }));
+
+  const totalesManual = calcularTotales(lineasCalculoManual, reglas, umbralPorMayor);
 
   const lineasReciboManual: LineaRecibo[] = detallesManual.map((d) => {
-    const unitario = totalesManual.porMayor
-      ? precioDesde(d.producto.escalones)
-      : precioUnitarioPara(d.producto.escalones, d.linea.cantidad);
+    const unitario = unitarioDeLinea(
+      { productoId: d.producto.id, escalones: d.producto.escalones, cantidad: d.linea.cantidad },
+      lineasCalculoManual,
+      totalesManual.porMayor
+    );
     return {
       referencia: d.producto.referencia,
       nombre: d.producto.nombre,
@@ -409,7 +415,7 @@ export function ConstructorRecibo({
           {detallesManual.length > 0 && (
             <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-petalo">
               <ul className="space-y-2">
-                {detallesManual.map((d) => (
+                {detallesManual.map((d, i) => (
                   <li
                     key={`${d.producto.id}-${d.linea.tonoId ?? "sin"}`}
                     className="flex items-center justify-between gap-2 text-sm"
@@ -423,7 +429,7 @@ export function ConstructorRecibo({
                       x{d.linea.cantidad}
                     </span>
                     <span className="shrink-0 font-semibold text-carbon">
-                      {pesos(subtotalPara(d.producto.escalones, d.linea.cantidad))}
+                      {pesos(lineasReciboManual[i].subtotal)}
                     </span>
                     <button
                       type="button"
