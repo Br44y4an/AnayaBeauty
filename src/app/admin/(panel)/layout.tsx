@@ -7,6 +7,7 @@ const ENLACES = [
   { href: "/admin/productos", texto: "Productos" },
   { href: "/admin/categorias", texto: "Categorías" },
   { href: "/admin/descuentos", texto: "Descuentos" },
+  { href: "/admin/recibos", texto: "Recibos" },
   { href: "/admin/configuracion", texto: "Ajustes" },
   { href: "/admin/qr", texto: "QR" },
 ];
