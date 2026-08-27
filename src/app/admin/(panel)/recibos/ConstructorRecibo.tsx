@@ -52,6 +52,8 @@ export function ConstructorRecibo({
   const [pedidoId, setPedidoId] = useState("");
   const pedido = pedidos.find((p) => p.id === pedidoId) ?? null;
   const [preciosPedidoOverride, setPreciosPedidoOverride] = useState<Record<string, number>>({});
+  const [descuentoPedidoOverride, setDescuentoPedidoOverride] = useState<number | null>(null);
+  const [mostrarDescuentoPedido, setMostrarDescuentoPedido] = useState(true);
 
   // ---------- Modo: manual ----------
   const [numero, setNumero] = useState(numeroSugerido);
@@ -64,6 +66,8 @@ export function ConstructorRecibo({
   const [tonoElegidoId, setTonoElegidoId] = useState<string>("");
   const [cantidadNueva, setCantidadNueva] = useState(1);
   const [preciosManualOverride, setPreciosManualOverride] = useState<Record<string, number>>({});
+  const [descuentoManualOverride, setDescuentoManualOverride] = useState<number | null>(null);
+  const [mostrarDescuentoManual, setMostrarDescuentoManual] = useState(true);
 
   const sugerencias = useMemo(() => {
     const termino = busqueda.trim().toLowerCase();
@@ -179,7 +183,8 @@ export function ConstructorRecibo({
           return { ...l, precioUnitarioAplicado: precio, subtotal: precio * l.cantidad };
         });
         const subtotalPedido = lineasPedidoRecibo.reduce((acc, l) => acc + l.subtotal, 0);
-        const totalPedido = subtotalPedido - pedido.descuento;
+        const descuentoFinal = descuentoPedidoOverride ?? pedido.descuento;
+        const totalPedido = subtotalPedido - descuentoFinal;
 
         await descargarReciboPDF({
           numero: pedido.numeroPedido,
@@ -196,8 +201,8 @@ export function ConstructorRecibo({
             subtotal: l.subtotal,
           })),
           subtotal: subtotalPedido,
-          descuento: pedido.descuento,
-          porcentaje: pedido.porcentajeDescuento,
+          descuento: mostrarDescuentoPedido ? descuentoFinal : 0,
+          porcentaje: mostrarDescuentoPedido && descuentoFinal === pedido.descuento ? pedido.porcentajeDescuento : 0,
           porMayor: pedido.porMayor,
           total: totalPedido,
           pagoMetodo,
@@ -205,6 +210,9 @@ export function ConstructorRecibo({
           pagoTitular,
         });
       } else {
+        const descuentoFinal = descuentoManualOverride ?? totalesManual.descuento;
+        const totalManualCalculado = subtotalManualOverride - descuentoFinal;
+
         await descargarReciboPDF({
           numero: numero.trim() || numeroSugerido(),
           fecha: new Date(),
@@ -213,10 +221,10 @@ export function ConstructorRecibo({
           clienteCiudad: clienteCiudad.trim() || null,
           lineas: lineasReciboManual,
           subtotal: subtotalManualOverride,
-          descuento: totalesManual.descuento,
-          porcentaje: totalesManual.porcentaje,
+          descuento: mostrarDescuentoManual ? descuentoFinal : 0,
+          porcentaje: mostrarDescuentoManual && descuentoFinal === totalesManual.descuento ? totalesManual.porcentaje : 0,
           porMayor: totalesManual.porMayor,
-          total: totalManualOverride,
+          total: totalManualCalculado,
           pagoMetodo,
           pagoNumero,
           pagoTitular,
@@ -261,6 +269,8 @@ export function ConstructorRecibo({
               onChange={(e) => {
                 setPedidoId(e.target.value);
                 setPreciosPedidoOverride({});
+                setDescuentoPedidoOverride(null);
+                setMostrarDescuentoPedido(true);
               }}
               className={CAMPO}
             >
@@ -305,17 +315,31 @@ export function ConstructorRecibo({
                 })}
               </ul>
               <div className="pt-2 text-right">
-                {pedido.descuento > 0 && (
-                  <p className="text-sm text-lila font-semibold mb-1">
-                    Descuento aplicado: -{pesos(pedido.descuento)}
-                  </p>
-                )}
+                <div className="flex justify-end items-center gap-3 mb-2 mt-1">
+                  <label className="flex items-center gap-1 text-xs text-carbon-suave cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={mostrarDescuentoPedido} 
+                      onChange={(e) => setMostrarDescuentoPedido(e.target.checked)} 
+                    />
+                    Mostrar en recibo
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-lila font-semibold">Descuento $</span>
+                    <input
+                      type="number"
+                      className="w-24 rounded border border-rosa-nube px-2 py-1 text-right font-semibold bg-white text-sm"
+                      value={descuentoPedidoOverride ?? pedido.descuento}
+                      onChange={(e) => setDescuentoPedidoOverride(e.target.value === "" ? null : Number(e.target.value))}
+                    />
+                  </div>
+                </div>
                 <p className="font-display text-lg text-fucsia">
                   {pesos(
                     pedido.lineas.reduce(
                       (acc, l) => acc + (preciosPedidoOverride[l.id] ?? l.precioUnitarioAplicado) * l.cantidad,
                       0
-                    ) - pedido.descuento
+                    ) - (descuentoPedidoOverride ?? pedido.descuento)
                   )}
                 </p>
               </div>
@@ -502,27 +526,44 @@ export function ConstructorRecibo({
               </ul>
 
               <div className="space-y-1 border-t border-rosa-nube pt-3">
-                <div className="flex justify-between text-sm text-carbon-suave">
+                <div className="flex justify-between text-sm text-carbon-suave items-center">
                   <span>Subtotal</span>
                   <span>{pesos(subtotalManualOverride)}</span>
                 </div>
                 {totalesManual.porMayor && (
-                  <div className="flex justify-between text-sm font-semibold text-lila">
+                  <div className="flex justify-between text-sm font-semibold text-lila items-center">
                     <span>Precio por mayor (base)</span>
                     <span>
                       −{pesos(totalesManual.subtotalNormal - totalesManual.subtotalBase)}
                     </span>
                   </div>
                 )}
-                {totalesManual.porcentaje > 0 && (
-                  <div className="flex justify-between text-sm font-semibold text-lila">
-                    <span>Descuento {totalesManual.porcentaje}%</span>
-                    <span>−{pesos(totalesManual.descuento)}</span>
+                
+                <div className="flex justify-between text-sm font-semibold text-lila items-center">
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1 text-xs text-carbon-suave cursor-pointer select-none font-normal">
+                      <input 
+                        type="checkbox" 
+                        checked={mostrarDescuentoManual} 
+                        onChange={(e) => setMostrarDescuentoManual(e.target.checked)} 
+                      />
+                      Mostrar en recibo
+                    </label>
+                    <span>Descuento $</span>
                   </div>
-                )}
-                <div className="flex justify-between pt-1 font-display text-lg text-carbon">
+                  <input
+                    type="number"
+                    className="w-24 rounded border border-rosa-nube px-2 py-0.5 text-right font-semibold bg-white text-sm text-carbon"
+                    value={descuentoManualOverride ?? totalesManual.descuento}
+                    onChange={(e) => setDescuentoManualOverride(e.target.value === "" ? null : Number(e.target.value))}
+                  />
+                </div>
+
+                <div className="flex justify-between pt-1 font-display text-lg text-carbon items-center">
                   <span>Total</span>
-                  <span className="text-fucsia">{pesos(totalManualOverride)}</span>
+                  <span className="text-fucsia">
+                    {pesos(subtotalManualOverride - (descuentoManualOverride ?? totalesManual.descuento))}
+                  </span>
                 </div>
               </div>
             </div>

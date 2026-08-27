@@ -220,11 +220,12 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
     y += destacado ? 22 : 16;
   }
 
-  if (datos.porMayor || datos.porcentaje > 0) {
+  if (datos.porMayor || datos.descuento > 0) {
     filaTotal("Subtotal", pesos(datos.subtotal));
     if (datos.porMayor) filaTotal("Precio por mayor", "aplicado");
-    if (datos.porcentaje > 0) {
-      filaTotal(`Descuento ${datos.porcentaje}%`, `-${pesos(datos.descuento)}`);
+    if (datos.descuento > 0) {
+      const etiqueta = datos.porcentaje > 0 ? `Descuento ${datos.porcentaje}%` : "Descuento";
+      filaTotal(etiqueta, `-${pesos(datos.descuento)}`);
     }
   }
   filaTotal("TOTAL", pesos(datos.total), true);
