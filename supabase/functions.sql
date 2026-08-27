@@ -28,6 +28,11 @@ $$;
 -- crear_pedido: valida el código, verifica stock, recalcula precios,
 -- descuenta inventario, guarda el pedido y quema el código.
 -- Todo o nada.
+--
+-- SUPERADA por la versión en migracion-v2.sql (mismo nombre, "create or
+-- replace"), que agrega tonos, precio por mayor y descuento por monto.
+-- Esta copia queda solo como punto de partida histórico: no la edites
+-- pensando que es la que corre en producción.
 -- ---------------------------------------------------------------------
 create or replace function crear_pedido(
   p_codigo   text,

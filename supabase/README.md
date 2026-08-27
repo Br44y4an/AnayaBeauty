@@ -5,10 +5,15 @@ Ejecuta estos archivos en el editor SQL de Supabase, **en este orden**:
 1. `schema.sql` — tablas, índices y configuración inicial
 2. `policies.sql` — reglas de seguridad (Row Level Security)
 3. `functions.sql` — funciones de pedidos y códigos
-4. `tests.sql` — verificación; debe terminar con "TODAS LAS PRUEBAS PASARON"
+4. `migracion-v2.sql` — tonos de color, precio por mayor y descuentos por
+   monto; también reemplaza `crear_pedido` por la versión que de verdad
+   aplica esos beneficios (la de `functions.sql` sola no los tiene)
+5. `tests.sql` — verificación; debe terminar con "TODAS LAS PRUEBAS PASARON"
 
-Los cuatro archivos son idempotentes: puedes volver a ejecutarlos sin dañar
-los datos existentes.
+Los cinco archivos son idempotentes: puedes volver a ejecutarlos sin dañar
+los datos existentes. `tests.sql` no cubre tonos/descuentos/precio por
+mayor todavía — para eso corre `node --env-file=.env.local
+scripts/probar-descuentos.mjs` contra la base real.
 
 ## Storage
 
