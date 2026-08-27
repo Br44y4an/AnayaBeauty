@@ -57,6 +57,7 @@ on conflict (clave) do nothing;
 update store_settings set valor = 'Llave',                  actualizado_en = now() where clave = 'pago_metodo';
 update store_settings set valor = '@RP3228813646',          actualizado_en = now() where clave = 'pago_numero';
 update store_settings set valor = 'A** Ma** Sar** Rod***',  actualizado_en = now() where clave = 'pago_titular';
+update store_settings set valor = '573228813646',           actualizado_en = now() where clave = 'whatsapp_negocio';
 
 -- ---------------------------------------------------------------------
 -- 5. Seguridad de las tablas nuevas

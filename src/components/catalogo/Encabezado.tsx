@@ -8,7 +8,7 @@ export function Encabezado() {
       <div className="relative -mx-4 overflow-hidden md:mx-0 md:rounded-tarjeta md:shadow-petalo">
         <Image
           src="/banner.jpg"
-          alt="Anaya Beauty — Encuentra tus mejores productos y excelentes valores. WhatsApp +57 313 255 3660"
+          alt="Anaya Beauty — Encuentra tus mejores productos y excelentes valores. WhatsApp +57 322 881 3646"
           width={1600}
           height={670}
           priority

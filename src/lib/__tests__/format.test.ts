@@ -26,6 +26,6 @@ describe("enlaceWhatsApp", () => {
   });
 
   it("usa el número del negocio en formato internacional sin signos", () => {
-    expect(WHATSAPP_NEGOCIO).toBe("573132553660");
+    expect(WHATSAPP_NEGOCIO).toBe("573228813646");
   });
 });

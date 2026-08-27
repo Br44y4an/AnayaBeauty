@@ -19,7 +19,7 @@ const CAMPOS = [
   {
     clave: "whatsapp_negocio",
     etiqueta: "WhatsApp del negocio",
-    ayuda: "Formato internacional sin signos: 573132553660",
+    ayuda: "Formato internacional sin signos: 573228813646",
   },
   {
     clave: "mensaje_exito",

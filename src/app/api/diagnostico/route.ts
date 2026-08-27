@@ -98,7 +98,7 @@ export async function GET(peticion: Request) {
     await enviarCorreoPedido({
       numeroPedido: "AB-PRUEBA",
       nombre: "Pedido de prueba del sistema",
-      whatsapp: "3132553660",
+      whatsapp: "3228813646",
       ciudad: "Medellín",
       codigo: "0000",
       subtotal: 74000,

@@ -1,4 +1,4 @@
-export const WHATSAPP_NEGOCIO = "573132553660";
+export const WHATSAPP_NEGOCIO = "573228813646";
 
 const formateador = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,

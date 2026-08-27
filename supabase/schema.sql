@@ -145,8 +145,8 @@ create table if not exists store_settings (
 insert into store_settings (clave, valor, publico) values
   ('pago_metodo',            'Nequi',                                true),
   ('pago_titular',           'Anaya Beauty',                         true),
-  ('pago_numero',            '3132553660',                           true),
-  ('whatsapp_negocio',       '573132553660',                         true),
+  ('pago_numero',            '3228813646',                           true),
+  ('whatsapp_negocio',       '573228813646',                         true),
   ('mensaje_exito',          '¡Gracias por tu compra, princesa! ✨',  true),
   ('horas_vigencia_codigo',  '24',                                   false)
 on conflict (clave) do nothing;
