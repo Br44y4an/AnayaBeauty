@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { precioDesde, subtotalPara, sugerenciaUpsell } from "@/lib/pricing";
+import { precioUnitarioPara, subtotalPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
 import { usarCarrito, unidadesDeProducto } from "@/lib/cart";
 import { Insignia } from "@/components/ui/Insignia";
@@ -31,10 +31,16 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
   const quedaPoco = producto.stock > 0 && producto.stock <= 5;
   const tieneCombo = producto.escalones.length > 1;
   const necesitaTono = producto.tonos.length > 0;
-  const desde = producto.escalones.length ? precioDesde(producto.escalones) : null;
+  // Precio de 1 unidad: es el que se cobra al tocar "Agregar" la primera vez,
+  // así que es el único que tiene sentido pintar en la tarjeta (mostrar el
+  // precio más bajo del combo confundía, porque no era lo que se cobraba).
+  const precioUnidad = producto.escalones.length
+    ? precioUnitarioPara(producto.escalones, 1)
+    : null;
 
   // Los tonos comparten inventario: cuenta todo lo del producto en la bolsa
   const yaEnBolsa = unidadesDeProducto(lineas, producto.id);
+  const lineasDeEsteProducto = lineas.filter((l) => l.productoId === producto.id);
   const tonoId = tono?.id ?? null;
   const enEstaLinea =
     lineas.find((l) => l.productoId === producto.id && l.tonoId === tonoId)?.cantidad ?? 0;
@@ -127,10 +133,10 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
             </Link>
           </div>
 
-          {desde !== null && (
+          {precioUnidad !== null && (
             <p className="text-base font-bold text-fucsia">
-              <span className="text-[11px] font-normal text-carbon-suave">desde </span>
-              {pesos(desde)}
+              {pesos(precioUnidad)}
+              <span className="text-[11px] font-normal text-carbon-suave"> c/u</span>
             </p>
           )}
 
@@ -199,6 +205,27 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
                     </p>
                   )}
                 </div>
+              )}
+
+              {/* Al cambiar de tono se pierde de vista lo ya agregado en los
+                  otros tonos de este mismo producto: este resumen lo deja
+                  siempre visible, cada tono con su propia cantidad. */}
+              {necesitaTono && lineasDeEsteProducto.length > 0 && (
+                <ul className="space-y-1 rounded-suave bg-rosa-nube px-2 py-1.5">
+                  {lineasDeEsteProducto.map((l) => (
+                    <li
+                      key={l.tonoId ?? "sin-tono"}
+                      className="flex items-center justify-between gap-2 text-[11px] text-carbon"
+                    >
+                      <span className="truncate">
+                        {l.tonoNombre ?? "Sin tono"} · x{l.cantidad}
+                      </span>
+                      <span className="shrink-0 font-semibold text-fucsia">
+                        {pesos(subtotalPara(producto.escalones, l.cantidad))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}

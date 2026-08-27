@@ -23,6 +23,7 @@ export function PanelCompra({ producto }: { producto: Producto }) {
   // bolsa reduce lo que todavía se puede agregar.
   const yaEnBolsa = unidadesDeProducto(lineas, producto.id);
   const disponible = Math.max(0, producto.stock - yaEnBolsa);
+  const lineasDeEsteProducto = lineas.filter((l) => l.productoId === producto.id);
 
   if (producto.stock === 0) {
     return (
@@ -115,6 +116,31 @@ export function PanelCompra({ producto }: { producto: Producto }) {
           </>
         )}
       </Boton>
+
+      {/* Al cambiar de tono se pierde de vista lo ya agregado en los otros
+          tonos: este resumen lo deja siempre visible, cada tono aparte. */}
+      {necesitaTono && lineasDeEsteProducto.length > 0 && (
+        <div className="rounded-tarjeta bg-rosa-nube p-4">
+          <p className="pb-2 text-xs font-semibold text-carbon-suave">
+            En tu bolsa de este producto
+          </p>
+          <ul className="space-y-1">
+            {lineasDeEsteProducto.map((l) => (
+              <li
+                key={l.tonoId ?? "sin-tono"}
+                className="flex items-center justify-between gap-2 text-sm text-carbon"
+              >
+                <span className="truncate">
+                  {l.tonoNombre ?? "Sin tono"} · x{l.cantidad}
+                </span>
+                <span className="shrink-0 font-semibold text-fucsia">
+                  {pesos(subtotalPara(producto.escalones, l.cantidad))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
