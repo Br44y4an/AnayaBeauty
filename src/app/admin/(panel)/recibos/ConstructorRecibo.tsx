@@ -51,6 +51,7 @@ export function ConstructorRecibo({
   // ---------- Modo: desde un pedido existente ----------
   const [pedidoId, setPedidoId] = useState("");
   const pedido = pedidos.find((p) => p.id === pedidoId) ?? null;
+  const [preciosPedidoOverride, setPreciosPedidoOverride] = useState<Record<string, number>>({});
 
   // ---------- Modo: manual ----------
   const [numero, setNumero] = useState(numeroSugerido);
@@ -62,6 +63,7 @@ export function ConstructorRecibo({
   const [productoElegido, setProductoElegido] = useState<Producto | null>(null);
   const [tonoElegidoId, setTonoElegidoId] = useState<string>("");
   const [cantidadNueva, setCantidadNueva] = useState(1);
+  const [preciosManualOverride, setPreciosManualOverride] = useState<Record<string, number>>({});
 
   const sugerencias = useMemo(() => {
     const termino = busqueda.trim().toLowerCase();
@@ -143,11 +145,13 @@ export function ConstructorRecibo({
   const totalesManual = calcularTotales(lineasCalculoManual, reglas, umbralPorMayor);
 
   const lineasReciboManual: LineaRecibo[] = detallesManual.map((d) => {
-    const unitario = unitarioDeLinea(
+    const key = `${d.producto.id}-${d.linea.tonoId ?? "sin"}`;
+    const unitarioCalculado = unitarioDeLinea(
       { productoId: d.producto.id, escalones: d.producto.escalones, cantidad: d.linea.cantidad },
       lineasCalculoManual,
       totalesManual.porMayor
     );
+    const unitario = preciosManualOverride[key] ?? unitarioCalculado;
     return {
       referencia: d.producto.referencia,
       nombre: d.producto.nombre,
@@ -155,8 +159,12 @@ export function ConstructorRecibo({
       cantidad: d.linea.cantidad,
       precioUnitario: unitario,
       subtotal: unitario * d.linea.cantidad,
-    };
+      key,
+    } as LineaRecibo & { key: string };
   });
+
+  const subtotalManualOverride = lineasReciboManual.reduce((acc, l) => acc + l.subtotal, 0);
+  const totalManualOverride = subtotalManualOverride - totalesManual.descuento;
 
   const listoParaDescargar =
     modo === "pedido" ? pedido !== null : clienteNombre.trim() !== "" && lineas.length > 0;
@@ -166,13 +174,20 @@ export function ConstructorRecibo({
     setGenerando(true);
     try {
       if (modo === "pedido" && pedido) {
+        const lineasPedidoRecibo = pedido.lineas.map(l => {
+          const precio = preciosPedidoOverride[l.id] ?? l.precioUnitarioAplicado;
+          return { ...l, precioUnitarioAplicado: precio, subtotal: precio * l.cantidad };
+        });
+        const subtotalPedido = lineasPedidoRecibo.reduce((acc, l) => acc + l.subtotal, 0);
+        const totalPedido = subtotalPedido - pedido.descuento;
+
         await descargarReciboPDF({
           numero: pedido.numeroPedido,
           fecha: new Date(pedido.creadoEn),
           clienteNombre: pedido.clienteNombre,
           clienteWhatsapp: pedido.clienteWhatsapp,
           clienteCiudad: pedido.clienteCiudad,
-          lineas: pedido.lineas.map((l) => ({
+          lineas: lineasPedidoRecibo.map((l) => ({
             referencia: l.referencia,
             nombre: l.nombre,
             tono: l.tono,
@@ -180,11 +195,11 @@ export function ConstructorRecibo({
             precioUnitario: l.precioUnitarioAplicado,
             subtotal: l.subtotal,
           })),
-          subtotal: pedido.subtotal,
+          subtotal: subtotalPedido,
           descuento: pedido.descuento,
           porcentaje: pedido.porcentajeDescuento,
           porMayor: pedido.porMayor,
-          total: pedido.total,
+          total: totalPedido,
           pagoMetodo,
           pagoNumero,
           pagoTitular,
@@ -197,11 +212,11 @@ export function ConstructorRecibo({
           clienteWhatsapp: clienteWhatsapp.trim() || null,
           clienteCiudad: clienteCiudad.trim() || null,
           lineas: lineasReciboManual,
-          subtotal: totalesManual.subtotalNormal,
+          subtotal: subtotalManualOverride,
           descuento: totalesManual.descuento,
           porcentaje: totalesManual.porcentaje,
           porMayor: totalesManual.porMayor,
-          total: totalesManual.total,
+          total: totalManualOverride,
           pagoMetodo,
           pagoNumero,
           pagoTitular,
@@ -243,7 +258,10 @@ export function ConstructorRecibo({
             </span>
             <select
               value={pedidoId}
-              onChange={(e) => setPedidoId(e.target.value)}
+              onChange={(e) => {
+                setPedidoId(e.target.value);
+                setPreciosPedidoOverride({});
+              }}
               className={CAMPO}
             >
               <option value="">Selecciona un pedido…</option>
@@ -262,20 +280,45 @@ export function ConstructorRecibo({
                 {pedido.clienteCiudad} · {pedido.clienteWhatsapp}
               </p>
               <ul className="space-y-1 pt-1">
-                {pedido.lineas.map((l) => (
-                  <li key={l.id} className="flex justify-between text-xs text-carbon">
-                    <span>
-                      {l.nombre}
-                      {l.tono && <strong className="text-fucsia"> · {l.tono}</strong>} x
-                      {l.cantidad}
-                    </span>
-                    <span className="font-semibold">{pesos(l.subtotal)}</span>
-                  </li>
-                ))}
+                {pedido.lineas.map((l) => {
+                  const precio = preciosPedidoOverride[l.id] ?? l.precioUnitarioAplicado;
+                  const subtotal = precio * l.cantidad;
+                  return (
+                    <li key={l.id} className="flex justify-between items-center text-xs text-carbon">
+                      <span>
+                        {l.nombre}
+                        {l.tono && <strong className="text-fucsia"> · {l.tono}</strong>} x
+                        {l.cantidad}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-carbon-suave text-[10px]">P.U. $</span>
+                        <input
+                          type="number"
+                          className="w-20 rounded border border-rosa-nube px-1 py-0.5 text-right font-semibold bg-white"
+                          value={precio}
+                          onChange={(e) => setPreciosPedidoOverride({...preciosPedidoOverride, [l.id]: Number(e.target.value)})}
+                        />
+                        <span className="font-semibold ml-2 min-w-[60px] text-right">{pesos(subtotal)}</span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
-              <p className="pt-1 text-right font-display text-lg text-fucsia">
-                {pesos(pedido.total)}
-              </p>
+              <div className="pt-2 text-right">
+                {pedido.descuento > 0 && (
+                  <p className="text-sm text-lila font-semibold mb-1">
+                    Descuento aplicado: -{pesos(pedido.descuento)}
+                  </p>
+                )}
+                <p className="font-display text-lg text-fucsia">
+                  {pesos(
+                    pedido.lineas.reduce(
+                      (acc, l) => acc + (preciosPedidoOverride[l.id] ?? l.precioUnitarioAplicado) * l.cantidad,
+                      0
+                    ) - pedido.descuento
+                  )}
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -415,9 +458,13 @@ export function ConstructorRecibo({
           {detallesManual.length > 0 && (
             <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-petalo">
               <ul className="space-y-2">
-                {detallesManual.map((d, i) => (
+                {detallesManual.map((d, i) => {
+                  const key = `${d.producto.id}-${d.linea.tonoId ?? "sin"}`;
+                  const lineaRecibo = lineasReciboManual.find(l => (l as any).key === key);
+                  if (!lineaRecibo) return null;
+                  return (
                   <li
-                    key={`${d.producto.id}-${d.linea.tonoId ?? "sin"}`}
+                    key={key}
                     className="flex items-center justify-between gap-2 text-sm"
                   >
                     <span className="min-w-0 truncate">
@@ -428,30 +475,40 @@ export function ConstructorRecibo({
                       )}{" "}
                       x{d.linea.cantidad}
                     </span>
-                    <span className="shrink-0 font-semibold text-carbon">
-                      {pesos(lineasReciboManual[i].subtotal)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        cambiarCantidad(d.producto.id, d.linea.tonoId, 0)
-                      }
-                      className="shrink-0 cursor-pointer text-xs text-carbon-suave underline hover:text-fucsia"
-                    >
-                      quitar
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-carbon-suave text-[10px]">P.U. $</span>
+                      <input
+                        type="number"
+                        className="w-20 rounded border border-rosa-nube px-1 py-0.5 text-right font-semibold bg-white"
+                        value={lineaRecibo.precioUnitario}
+                        onChange={(e) => setPreciosManualOverride({...preciosManualOverride, [key]: Number(e.target.value)})}
+                      />
+                      <span className="font-semibold text-carbon min-w-[60px] text-right">
+                        {pesos(lineaRecibo.subtotal)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          cambiarCantidad(d.producto.id, d.linea.tonoId, 0)
+                        }
+                        className="shrink-0 cursor-pointer text-xs text-carbon-suave underline hover:text-fucsia ml-1"
+                      >
+                        quitar
+                      </button>
+                    </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
 
               <div className="space-y-1 border-t border-rosa-nube pt-3">
                 <div className="flex justify-between text-sm text-carbon-suave">
                   <span>Subtotal</span>
-                  <span>{pesos(totalesManual.subtotalNormal)}</span>
+                  <span>{pesos(subtotalManualOverride)}</span>
                 </div>
                 {totalesManual.porMayor && (
                   <div className="flex justify-between text-sm font-semibold text-lila">
-                    <span>Precio por mayor</span>
+                    <span>Precio por mayor (base)</span>
                     <span>
                       −{pesos(totalesManual.subtotalNormal - totalesManual.subtotalBase)}
                     </span>
@@ -465,7 +522,7 @@ export function ConstructorRecibo({
                 )}
                 <div className="flex justify-between pt-1 font-display text-lg text-carbon">
                   <span>Total</span>
-                  <span className="text-fucsia">{pesos(totalesManual.total)}</span>
+                  <span className="text-fucsia">{pesos(totalManualOverride)}</span>
                 </div>
               </div>
             </div>
