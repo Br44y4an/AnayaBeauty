@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { crearClienteServidor } from "@/lib/supabase/server";
 import { generarSlug } from "@/lib/slug";
+import { rutaEnBucket } from "@/lib/storage";
 
 export type ResultadoGuardado = { ok: true; id: string } | { ok: false; error: string };
 
@@ -149,12 +150,56 @@ export async function guardarProducto(
 export async function alternarActivo(id: string, activo: boolean) {
   const supabase = await crearClienteServidor();
 
-  // Nunca se borra un producto: los pedidos históricos lo referencian.
+  // Ocultar es la vía reversible: el producto sigue existiendo para editarlo
+  // después. Para borrarlo de verdad está eliminarProducto.
   const { error } = await supabase.from("products").update({ activo }).eq("id", id);
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin/productos");
   revalidatePath("/");
+}
+
+export type ResultadoEliminado = { ok: true } | { ok: false; error: string };
+
+/**
+ * Borra el producto de verdad. Los pedidos históricos no se pierden: cada
+ * línea guarda su propia copia de referencia, nombre, tono y precio, y la
+ * columna product_id queda en null (on delete set null). Los escalones y los
+ * tonos se van en cascada.
+ */
+export async function eliminarProducto(id: string): Promise<ResultadoEliminado> {
+  if (!id) return { ok: false, error: "Falta el producto a eliminar." };
+
+  const supabase = await crearClienteServidor();
+
+  // El proxy ya protege /admin, pero borrar es definitivo: se comprueba aquí
+  // también, porque sin sesión el delete no falla, simplemente no borra nada.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a entrar." };
+
+  const { data: producto, error: errorLectura } = await supabase
+    .from("products")
+    .select("referencia, imagen_principal")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errorLectura) return { ok: false, error: errorLectura.message };
+  if (!producto) return { ok: false, error: "Ese producto ya no existe." };
+
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  // La imagen quedaría huérfana en el bucket. Solo se borran las nuestras:
+  // las importadas por CSV pueden apuntar a cualquier otro sitio.
+  const ruta = rutaEnBucket(producto.imagen_principal, "productos");
+  if (ruta) await supabase.storage.from("productos").remove([ruta]);
+
+  revalidatePath("/admin/productos");
+  revalidatePath("/");
+  revalidatePath(`/producto/${producto.referencia}`);
+  return { ok: true };
 }
 
 export async function guardarCategoria(datos: FormData) {

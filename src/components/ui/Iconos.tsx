@@ -91,3 +91,13 @@ export function IconoLupa({ className = base }: Props) {
     </svg>
   );
 }
+
+export function IconoBasura({ className = base }: Props) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 7h16M10 4h4M9 7v11M15 7v11" />
+      <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+    </svg>
+  );
+}
