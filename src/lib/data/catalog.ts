@@ -2,6 +2,7 @@ import { crearClienteServidor } from "@/lib/supabase/server";
 import { precioDesde } from "@/lib/pricing";
 import type { Producto, Categoria } from "@/lib/types";
 import type { ReglaDescuento } from "@/lib/discounts";
+import { traerTodas } from "@/lib/data/paginacion";
 
 const CAMPOS_PRODUCTO = `
   id, referencia, nombre, descripcion, category_id,
@@ -82,26 +83,36 @@ export async function obtenerProductos(opciones?: {
   orden?: "recientes" | "precio-asc" | "precio-desc";
 }): Promise<Producto[]> {
   const supabase = await crearClienteServidor();
-  let consulta = supabase.from("products").select(CAMPOS_PRODUCTO).eq("activo", true);
 
+  let categoriaId: string | null = null;
   if (opciones?.categoriaSlug) {
     const { data: cat } = await supabase
       .from("categories")
       .select("id")
       .eq("slug", opciones.categoriaSlug)
       .maybeSingle();
-    if (cat) consulta = consulta.eq("category_id", cat.id);
+    categoriaId = cat?.id ?? null;
   }
 
-  if (opciones?.busqueda?.trim()) {
-    const termino = `%${opciones.busqueda.trim()}%`;
-    consulta = consulta.or(`nombre.ilike.${termino},referencia.ilike.${termino}`);
-  }
+  // Se arma una consulta nueva por página: los builders de PostgREST son
+  // mutables y de un solo uso, reutilizar el mismo entre páginas es frágil.
+  const paginaDe = (desde: number, hasta: number) => {
+    let consulta = supabase.from("products").select(CAMPOS_PRODUCTO).eq("activo", true);
+    if (categoriaId) consulta = consulta.eq("category_id", categoriaId);
+    if (opciones?.busqueda?.trim()) {
+      const termino = `%${opciones.busqueda.trim()}%`;
+      consulta = consulta.or(`nombre.ilike.${termino},referencia.ilike.${termino}`);
+    }
+    return consulta.order("orden").range(desde, hasta);
+  };
 
-  const { data, error } = await consulta.order("orden").limit(500);
-  if (error) throw new Error(`No se pudieron cargar los productos: ${error.message}`);
+  // Paginado: con `.limit()` fijo los productos que sobran del tope se caen
+  // del catálogo en silencio a medida que crece la tienda.
+  const filas = await traerTodas<FilaProducto>(paginaDe).catch((e: Error) => {
+    throw new Error(`No se pudieron cargar los productos: ${e.message}`);
+  });
 
-  const productos = (data as unknown as FilaProducto[]).map(mapearProducto);
+  const productos = filas.map(mapearProducto);
 
   // El orden por precio se hace en memoria porque el precio surge de los
   // escalones, no de una columna de la tabla de productos.

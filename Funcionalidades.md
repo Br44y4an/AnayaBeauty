@@ -293,6 +293,14 @@ escalones (1 obligatorio, 3 y 6 opcionales).
   `obtenerReglasDescuento`, `obtenerConfiguracionDePrecios`. Incluye
   `mapearProducto` (fila de Supabase → tipo `Producto`) reutilizado por el
   panel admin.
+- `paginacion.ts`: `traerTodas(consultar)` — pide la tabla por páginas de 1000
+  con `.range()` hasta agotarla. Existe porque PostgREST recorta toda respuesta
+  a su `max-rows` **sin devolver error**: `obtenerProductos` y
+  `listarProductosAdmin` tenían un `.limit(500)` fijo y, con 591 productos
+  cargados, 76 productos con precio desaparecían del buscador del recibo manual
+  sin ninguna señal. Toda consulta que deba devolver el catálogo completo pasa
+  por aquí; cada página arma su propia consulta porque los builders de PostgREST
+  son mutables y de un solo uso.
 - `admin-catalog.ts`: mismas consultas pero sin filtrar por `activo` (usa
   `clienteAdmin`, ve todo).
 - `codes.ts` / `orders.ts`: consultas del panel (usa `clienteAdmin`).
@@ -397,8 +405,9 @@ lee y guarda localmente).
 
 ## 16. Pruebas
 
-- `npm test` (Vitest): 87 pruebas sobre `src/lib/` — `pricing`, `discounts`,
-  `cart`, `csv`, `format`, `slug`, `catalog-mapeo`, `order-template`, más
+- `npm test` (Vitest): 101 pruebas sobre `src/lib/` — `pricing`, `discounts`,
+  `cart`, `csv`, `format`, `slug`, `catalog-mapeo`, `order-template`,
+  `paginacion` (regresión del tope de 500 productos), `storage`, más
   `PanelCompra.test.tsx` (componente).
 - `npm run build`: verificación de tipos + compilación.
 - `supabase/tests.sql`: 9 comprobaciones SQL (códigos reusados, stock

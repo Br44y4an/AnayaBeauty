@@ -1,6 +1,7 @@
 import "server-only";
 import { clienteAdmin } from "@/lib/supabase/admin";
 import { mapearProducto, type FilaProducto } from "@/lib/data/catalog";
+import { traerTodas } from "@/lib/data/paginacion";
 import type { Producto, Categoria } from "@/lib/types";
 
 /**
@@ -18,17 +19,25 @@ const CAMPOS = `
 
 export async function listarProductosAdmin(busqueda?: string): Promise<Producto[]> {
   const supabase = clienteAdmin();
-  let consulta = supabase.from("products").select(CAMPOS);
 
-  if (busqueda?.trim()) {
-    const t = `%${busqueda.trim()}%`;
-    consulta = consulta.or(`nombre.ilike.${t},referencia.ilike.${t}`);
-  }
+  // Se arma una consulta nueva por página: los builders de PostgREST son
+  // mutables y de un solo uso, reutilizar el mismo entre páginas es frágil.
+  const paginaDe = (desde: number, hasta: number) => {
+    let consulta = supabase.from("products").select(CAMPOS);
+    if (busqueda?.trim()) {
+      const t = `%${busqueda.trim()}%`;
+      consulta = consulta.or(`nombre.ilike.${t},referencia.ilike.${t}`);
+    }
+    return consulta.order("referencia").range(desde, hasta);
+  };
 
-  const { data, error } = await consulta.order("referencia").limit(500);
-  if (error) throw new Error(`No se pudieron cargar los productos: ${error.message}`);
+  // Sin paginar, PostgREST recorta la respuesta y los productos sobrantes
+  // desaparecen del panel sin ningún error visible.
+  const filas = await traerTodas<FilaProducto>(paginaDe).catch((e: Error) => {
+    throw new Error(`No se pudieron cargar los productos: ${e.message}`);
+  });
 
-  return (data as unknown as FilaProducto[]).map(mapearProducto);
+  return filas.map(mapearProducto);
 }
 
 export async function obtenerProductoAdmin(id: string): Promise<Producto | null> {
