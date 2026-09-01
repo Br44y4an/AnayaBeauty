@@ -3,6 +3,7 @@ import { precioDesde } from "@/lib/pricing";
 import type { Producto, Categoria } from "@/lib/types";
 import type { ReglaDescuento } from "@/lib/discounts";
 import { traerTodas } from "@/lib/data/paginacion";
+import { filtroBusqueda } from "@/lib/data/busqueda";
 
 const CAMPOS_PRODUCTO = `
   id, referencia, nombre, descripcion, category_id,
@@ -99,10 +100,7 @@ export async function obtenerProductos(opciones?: {
   const paginaDe = (desde: number, hasta: number) => {
     let consulta = supabase.from("products").select(CAMPOS_PRODUCTO).eq("activo", true);
     if (categoriaId) consulta = consulta.eq("category_id", categoriaId);
-    if (opciones?.busqueda?.trim()) {
-      const termino = `%${opciones.busqueda.trim()}%`;
-      consulta = consulta.or(`nombre.ilike.${termino},referencia.ilike.${termino}`);
-    }
+    if (opciones?.busqueda?.trim()) consulta = consulta.or(filtroBusqueda(opciones.busqueda));
     return consulta.order("orden").range(desde, hasta);
   };
 

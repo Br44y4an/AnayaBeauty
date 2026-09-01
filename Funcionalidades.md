@@ -293,6 +293,12 @@ escalones (1 obligatorio, 3 y 6 opcionales).
   `obtenerReglasDescuento`, `obtenerConfiguracionDePrecios`. Incluye
   `mapearProducto` (fila de Supabase → tipo `Producto`) reutilizado por el
   panel admin.
+- `busqueda.ts`: `filtroBusqueda(texto, columnas)` — arma el argumento de
+  `.or()` de PostgREST entrecomillando el patrón. En `or(...)` la coma separa
+  condiciones, así que meter el término crudo hacía que buscar "base, matte"
+  devolviera "failed to parse logic tree": la consulta lanzaba y la página
+  moría con un 500 (en el navegador, "Minified React error #441"). Lo usan los
+  tres buscadores: catálogo público, productos del panel y pedidos del panel.
 - `paginacion.ts`: `traerTodas(consultar)` — pide la tabla por páginas de 1000
   con `.range()` hasta agotarla. Existe porque PostgREST recorta toda respuesta
   a su `max-rows` **sin devolver error**: `obtenerProductos` y
@@ -405,9 +411,10 @@ lee y guarda localmente).
 
 ## 16. Pruebas
 
-- `npm test` (Vitest): 101 pruebas sobre `src/lib/` — `pricing`, `discounts`,
+- `npm test` (Vitest): 108 pruebas sobre `src/lib/` — `pricing`, `discounts`,
   `cart`, `csv`, `format`, `slug`, `catalog-mapeo`, `order-template`,
-  `paginacion` (regresión del tope de 500 productos), `storage`, más
+  `paginacion` (regresión del tope de 500 productos),
+  `busqueda` (regresión de la coma que reventaba el buscador), `storage`, más
   `PanelCompra.test.tsx` (componente).
 - `npm run build`: verificación de tipos + compilación.
 - `supabase/tests.sql`: 9 comprobaciones SQL (códigos reusados, stock

@@ -2,6 +2,7 @@ import "server-only";
 import { clienteAdmin } from "@/lib/supabase/admin";
 import { mapearProducto, type FilaProducto } from "@/lib/data/catalog";
 import { traerTodas } from "@/lib/data/paginacion";
+import { filtroBusqueda } from "@/lib/data/busqueda";
 import type { Producto, Categoria } from "@/lib/types";
 
 /**
@@ -24,10 +25,7 @@ export async function listarProductosAdmin(busqueda?: string): Promise<Producto[
   // mutables y de un solo uso, reutilizar el mismo entre páginas es frágil.
   const paginaDe = (desde: number, hasta: number) => {
     let consulta = supabase.from("products").select(CAMPOS);
-    if (busqueda?.trim()) {
-      const t = `%${busqueda.trim()}%`;
-      consulta = consulta.or(`nombre.ilike.${t},referencia.ilike.${t}`);
-    }
+    if (busqueda?.trim()) consulta = consulta.or(filtroBusqueda(busqueda));
     return consulta.order("referencia").range(desde, hasta);
   };
 

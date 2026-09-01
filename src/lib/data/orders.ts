@@ -1,6 +1,7 @@
 import "server-only";
 import { clienteAdmin } from "@/lib/supabase/admin";
 import type { Pedido, EstadoPedido } from "@/lib/types";
+import { filtroBusqueda } from "@/lib/data/busqueda";
 
 const CAMPOS_PEDIDO = `
   id, numero_pedido, cliente_nombre, cliente_whatsapp, cliente_ciudad,
@@ -102,9 +103,12 @@ export async function listarPedidos(filtro?: {
   if (filtro?.estado) consulta = consulta.eq("estado", filtro.estado);
 
   if (filtro?.busqueda?.trim()) {
-    const t = `%${filtro.busqueda.trim()}%`;
     consulta = consulta.or(
-      `cliente_nombre.ilike.${t},numero_pedido.ilike.${t},cliente_whatsapp.ilike.${t}`
+      filtroBusqueda(filtro.busqueda, [
+        "cliente_nombre",
+        "numero_pedido",
+        "cliente_whatsapp",
+      ])
     );
   }
 
