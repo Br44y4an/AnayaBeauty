@@ -125,7 +125,9 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
             </p>
 
             <Link
-              href={`/producto/${producto.referencia}`}
+              // Codificada: hay referencias con "/" y espacios (ACRYLIC80/150,
+              // A05 ESPEJO) y sin escapar el "/" parte la ruta en dos y da 404.
+              href={`/producto/${encodeURIComponent(producto.referencia)}`}
               className="line-clamp-2 text-sm font-semibold leading-snug text-carbon
                          transition hover:text-fucsia focus-visible:outline-none
                          focus-visible:ring-2 focus-visible:ring-fucsia"
