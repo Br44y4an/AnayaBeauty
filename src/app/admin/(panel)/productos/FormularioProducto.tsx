@@ -58,9 +58,13 @@ export function FormularioProducto({
     try {
       const datos = new FormData();
       datos.set("archivo", archivo);
-      setImagen(await subirImagen(datos));
-    } catch (e) {
-      setErrorImagen(e instanceof Error ? e.message : "No se pudo subir la imagen");
+      const resultado = await subirImagen(datos);
+      if (resultado.ok) setImagen(resultado.url);
+      else setErrorImagen(resultado.error);
+    } catch {
+      // Solo queda aquí lo que ni siquiera llegó al servidor (red caída): el
+      // action ya devuelve sus propios fallos con un mensaje entendible.
+      setErrorImagen("No se pudo conectar para subir la imagen. Revisa tu internet.");
     } finally {
       setSubiendo(false);
     }

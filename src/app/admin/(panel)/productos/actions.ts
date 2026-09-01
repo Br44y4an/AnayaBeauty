@@ -4,29 +4,48 @@ import { revalidatePath } from "next/cache";
 import { crearClienteServidor } from "@/lib/supabase/server";
 import { generarSlug } from "@/lib/slug";
 import { rutaEnBucket } from "@/lib/storage";
+import { clienteAdmin } from "@/lib/supabase/admin";
+import { validarImagen, rutaDeImagen } from "@/lib/imagen";
 
 export type ResultadoGuardado = { ok: true; id: string } | { ok: false; error: string };
 
-export async function subirImagen(datos: FormData): Promise<string> {
+export type ResultadoSubida = { ok: true; url: string } | { ok: false; error: string };
+
+/**
+ * Sube la foto de un producto al bucket `productos`.
+ *
+ * Devuelve el error en vez de lanzarlo: una excepción dentro de un Server
+ * Action llega al navegador como "Minified React error #441" (React borra el
+ * mensaje en producción), así que el panel no podía decir qué había fallado.
+ *
+ * Sube con el cliente de servicio, igual que el resto de escrituras del panel:
+ * el bucket no tiene política de RLS de escritura para `authenticated`, así
+ * que subir con la sesión del usuario devolvía "new row violates row-level
+ * security policy". Por eso se exige sesión aquí de forma explícita antes.
+ */
+export async function subirImagen(datos: FormData): Promise<ResultadoSubida> {
+  const sesion = await crearClienteServidor();
+  const {
+    data: { user },
+  } = await sesion.auth.getUser();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a entrar." };
+
   const archivo = datos.get("archivo") as File | null;
-  if (!archivo || archivo.size === 0) throw new Error("No se recibió ninguna imagen");
 
-  if (archivo.size > 5 * 1024 * 1024) {
-    throw new Error("La imagen pesa más de 5 MB. Usa una más liviana.");
-  }
+  const problema = validarImagen(archivo);
+  if (problema) return { ok: false, error: problema };
 
-  const supabase = await crearClienteServidor();
-  const extension = archivo.name.split(".").pop()?.toLowerCase() ?? "jpg";
-  const ruta = `${crypto.randomUUID()}.${extension}`;
+  const ruta = rutaDeImagen(archivo!.name, crypto.randomUUID());
+  const supabase = clienteAdmin();
 
   const { error } = await supabase.storage
     .from("productos")
-    .upload(ruta, archivo, { contentType: archivo.type, upsert: false });
+    .upload(ruta, archivo!, { contentType: archivo!.type || undefined, upsert: false });
 
-  if (error) throw new Error(`No se pudo subir la imagen: ${error.message}`);
+  if (error) return { ok: false, error: `No se pudo subir la imagen: ${error.message}` };
 
   const { data } = supabase.storage.from("productos").getPublicUrl(ruta);
-  return data.publicUrl;
+  return { ok: true, url: data.publicUrl };
 }
 
 export async function guardarProducto(
@@ -193,8 +212,11 @@ export async function eliminarProducto(id: string): Promise<ResultadoEliminado> 
 
   // La imagen quedaría huérfana en el bucket. Solo se borran las nuestras:
   // las importadas por CSV pueden apuntar a cualquier otro sitio.
+  // Con la sesión del usuario el remove no falla: devuelve 0 objetos y deja
+  // el archivo ahí (el bucket no tiene política de borrado). Va con el cliente
+  // de servicio, que sí puede.
   const ruta = rutaEnBucket(producto.imagen_principal, "productos");
-  if (ruta) await supabase.storage.from("productos").remove([ruta]);
+  if (ruta) await clienteAdmin().storage.from("productos").remove([ruta]);
 
   revalidatePath("/admin/productos");
   revalidatePath("/");

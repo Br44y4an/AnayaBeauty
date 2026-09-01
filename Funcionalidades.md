@@ -255,6 +255,15 @@ Todas las acciones de escritura del panel verifican sesión (`exigirSesion` en
 `acciones-pedidos.ts`) antes de usar el cliente con clave de servicio
 (`clienteAdmin`), porque ese cliente se salta RLS.
 
+**Storage:** subir y borrar imágenes también va por `clienteAdmin` (tras
+comprobar la sesión). Las políticas de escritura del bucket `productos` que
+describe `supabase/README.md` nunca se aplicaron a la base, así que con la
+sesión del usuario `upload` devolvía "new row violates row-level security
+policy" y `remove` fallaba en silencio (0 objetos, el archivo se quedaba).
+Además `subirImagen` **devuelve** el error en vez de lanzarlo: una excepción
+dentro de un Server Action llega al navegador como "Minified React error
+#441", con el mensaje real borrado por React en producción.
+
 ## 8. Correo (`src/lib/email/`)
 
 - `send-order.ts`: `enviarCorreoPedido` vía Resend. **Nunca lanza** — si el
@@ -276,6 +285,9 @@ escalones (1 obligatorio, 3 y 6 opcionales).
 
 ## 10. Utilidades (`src/lib/`)
 
+- `imagen.ts`: `validarImagen` / `rutaDeImagen` para las fotos de producto. La
+  ruta en el bucket es siempre `uuid.extension`: el nombre original trae
+  espacios y hasta barras ("WhatsApp Image 2026-08-31 at 7.21.50 PM.jpeg").
 - `format.ts`: `pesos(valor)` → "$27.000" (Intl.NumberFormat es-CO);
   `enlaceWhatsApp(mensaje)` → link `wa.me` con mensaje codificado;
   `WHATSAPP_NEGOCIO` hardcodeado como fallback (573228813646).
@@ -411,10 +423,11 @@ lee y guarda localmente).
 
 ## 16. Pruebas
 
-- `npm test` (Vitest): 108 pruebas sobre `src/lib/` — `pricing`, `discounts`,
+- `npm test` (Vitest): 118 pruebas sobre `src/lib/` — `pricing`, `discounts`,
   `cart`, `csv`, `format`, `slug`, `catalog-mapeo`, `order-template`,
   `paginacion` (regresión del tope de 500 productos),
-  `busqueda` (regresión de la coma que reventaba el buscador), `storage`, más
+  `busqueda` (regresión de la coma que reventaba el buscador),
+  `imagen` (regresión de la subida de fotos), `storage`, más
   `PanelCompra.test.tsx` (componente).
 - `npm run build`: verificación de tipos + compilación.
 - `supabase/tests.sql`: 9 comprobaciones SQL (códigos reusados, stock
