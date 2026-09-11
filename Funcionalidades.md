@@ -309,6 +309,38 @@ correr el SQL, el catálogo responde 500 y nadie puede pedir.
   `code_attempts` — el único acceso público es a través de las funciones
   `security definer`. Esto evita que cualquiera pueda leer códigos o pedidos
   de otras personas.
+### Permisos de las funciones RPC (agujero encontrado y cerrado en la v4)
+
+Supabase concede `EXECUTE` a `anon` y `authenticated` **por defecto** sobre las
+funciones del esquema `public`, y ese permiso es DIRECTO: el
+`revoke ... from public` que traían las migraciones **no lo quitaba**.
+
+Mientras existió el código de 4 dígitos daba igual —sin un código válido la
+llamada no llegaba a ninguna parte—, pero al quitarlo `crear_pedido` quedó
+alcanzable desde fuera con la clave anónima, la que va incrustada en el
+navegador y cualquiera puede leer, por `/rest/v1/rpc/crear_pedido`. Y quien
+llama directo manda `p_ip_hash` en null, así que **también se salta el límite
+por dispositivo**. Como cada pedido descuenta inventario, se podía vaciar el
+catálogo entero sin comprar nada.
+
+Estado actual, verificado contra la base:
+
+| función | quién puede ejecutarla |
+|---|---|
+| `crear_pedido` | solo `service_role` |
+| `cancelar_pedido` | solo `service_role` |
+| `generar_codigo` | solo `service_role` (en desuso) |
+| `productos_del_carrito` | `anon` también — **intencional**, es de solo lectura |
+
+`scripts/probar-seguridad.mjs` ataca la base con la clave anónima y comprueba
+las dos caras: que no se pueda escribir ni leer lo ajeno, y que sí se pueda
+leer el catálogo y consultar la propia bolsa. Correrlo tras cualquier cambio
+en funciones o políticas.
+
+Las funciones también llevan `search_path` fijo: sin él, quien controle su
+propio `search_path` puede hacer que la función resuelva una tabla distinta de
+la que cree estar leyendo.
+
 - Registro de nuevos usuarios debe desactivarse manualmente en Supabase
   (Authentication → Providers → Email → "Enable sign ups" OFF) — de lo
   contrario cualquiera podría registrarse y entrar al panel.
@@ -689,6 +721,9 @@ lee y guarda localmente).
   atomicidad del stock, límite por dispositivo, cancelación idempotente y nota
   de la clienta. (`tests.sql` quedó obsoleto.)
 - `scripts/verificar-migracion.mjs`: estado de la base antes de desplegar.
+- `scripts/probar-seguridad.mjs`: ataca la base con la clave anónima del
+  navegador y comprueba que no se pueda crear pedidos, cancelar, leer datos de
+  otras clientas ni tocar el inventario.
 - Los scripts `probar-*.mjs` son pruebas de integración contra la base real
   (no mockeada), pensadas para correrse manualmente cuando se toca la lógica
   de precios/descuentos/flujo.
