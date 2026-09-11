@@ -41,7 +41,7 @@ export function BotonEliminarProducto({
         onClick={() => setConfirmando(true)}
         aria-label={`Eliminar ${nombre}`}
         title="Eliminar producto"
-        className="flex min-h-[40px] w-10 cursor-pointer items-center justify-center
+        className="flex min-h-[44px] w-10 cursor-pointer items-center justify-center
                    rounded-pastilla text-carbon-suave transition duration-200
                    hover:bg-fucsia/10 hover:text-fucsia focus-visible:outline-none
                    focus-visible:ring-2 focus-visible:ring-fucsia"
@@ -60,7 +60,7 @@ export function BotonEliminarProducto({
           type="button"
           onClick={eliminar}
           disabled={eliminando}
-          className="min-h-[40px] cursor-pointer rounded-pastilla bg-fucsia px-3 text-xs
+          className="min-h-[44px] cursor-pointer rounded-pastilla bg-fucsia px-3 text-xs
                      font-semibold text-petalo transition hover:brightness-110
                      disabled:pointer-events-none disabled:opacity-40"
         >
@@ -74,7 +74,7 @@ export function BotonEliminarProducto({
             setError(null);
           }}
           disabled={eliminando}
-          className="min-h-[40px] cursor-pointer px-2 text-xs text-carbon-suave
+          className="min-h-[44px] cursor-pointer px-2 text-xs text-carbon-suave
                      underline transition hover:text-fucsia"
         >
           Cancelar

@@ -1,13 +1,39 @@
 import { crearClienteServidor } from "@/lib/supabase/server";
-import { precioDesde } from "@/lib/pricing";
-import type { Producto, Categoria } from "@/lib/types";
+import type { Producto, Categoria, Tono } from "@/lib/types";
 import type { ReglaDescuento } from "@/lib/discounts";
-import { traerTodas } from "@/lib/data/paginacion";
 import { filtroBusqueda } from "@/lib/data/busqueda";
 
-const CAMPOS_PRODUCTO = `
+/**
+ * Consultas públicas del catálogo (solo productos activos).
+ *
+ * DOS DECISIONES QUE VALE LA PENA ENTENDER
+ *
+ * 1. La grilla NO trae los tonos. Un producto puede tener 40, y con 591
+ *    productos eso eran decenas de miles de filas por pantalla para
+ *    pintar unos círculos que la clienta casi nunca quería mirar. Ahora
+ *    solo viaja `num_tonos`, y los tonos se piden con
+ *    `obtenerTonosDeProducto` al abrir la hoja de selección.
+ *
+ * 2. La grilla se pagina en la base, no en memoria. Antes se traía la
+ *    tabla entera para poder ordenarla por precio, porque el precio vive
+ *    en `price_tiers` y no en `products`. La migración v4 añadió las
+ *    columnas `precio_desde` / `precio_base`, mantenidas por disparador,
+ *    y con eso el orden y el corte los hace PostgreSQL.
+ */
+
+/** Cuántos productos entran en cada tanda del catálogo. */
+export const POR_PAGINA = 24;
+
+const CAMPOS_GRILLA = `
   id, referencia, nombre, descripcion, category_id,
-  imagen_principal, galeria, stock, activo,
+  imagen_principal, galeria, stock, activo, num_tonos,
+  categories ( nombre ),
+  price_tiers ( min_cantidad, precio_unitario )
+`;
+
+const CAMPOS_DETALLE = `
+  id, referencia, nombre, descripcion, category_id,
+  imagen_principal, galeria, stock, activo, num_tonos,
   categories ( nombre ),
   price_tiers ( min_cantidad, precio_unitario ),
   product_shades ( id, nombre, color_hex, orden )
@@ -27,12 +53,22 @@ export type FilaProducto = {
   galeria: string[] | null;
   stock: number;
   activo: boolean;
+  num_tonos?: number | null;
   price_tiers: FilaEscalon[] | null;
   product_shades?: FilaTono[] | null;
 };
 
+export function mapearTono(t: FilaTono): Tono {
+  return { id: t.id, nombre: t.nombre, colorHex: t.color_hex, orden: t.orden };
+}
+
+export function ordenarTonos(tonos: Tono[]): Tono[] {
+  return [...tonos].sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre));
+}
+
 export function mapearProducto(fila: FilaProducto): Producto {
   const categoria = Array.isArray(fila.categories) ? fila.categories[0] : fila.categories;
+  const tonos = ordenarTonos((fila.product_shades ?? []).map(mapearTono));
 
   return {
     id: fila.id,
@@ -48,14 +84,11 @@ export function mapearProducto(fila: FilaProducto): Producto {
     escalones: (fila.price_tiers ?? [])
       .map((e) => ({ minCantidad: e.min_cantidad, precioUnitario: e.precio_unitario }))
       .sort((a, b) => a.minCantidad - b.minCantidad),
-    tonos: (fila.product_shades ?? [])
-      .map((t) => ({
-        id: t.id,
-        nombre: t.nombre,
-        colorHex: t.color_hex,
-        orden: t.orden,
-      }))
-      .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)),
+    // Cuando la consulta sí trajo los tonos, ese conteo manda: es el dato
+    // fresco. `num_tonos` lo mantiene un disparador y podría ir un
+    // instante por detrás justo después de editar la paleta.
+    numTonos: tonos.length || (fila.num_tonos ?? 0),
+    tonos,
   };
 }
 
@@ -78,12 +111,29 @@ export async function obtenerCategorias(): Promise<Categoria[]> {
   }));
 }
 
+export type OrdenCatalogo = "destacados" | "precio-asc" | "precio-desc" | "nuevos";
+
+export type PaginaProductos = {
+  productos: Producto[];
+  /** Cuántos hay en total con estos filtros (para "12 de 340"). */
+  total: number;
+  /** Si queda otra tanda por pedir. */
+  hayMas: boolean;
+  pagina: number;
+};
+
 export async function obtenerProductos(opciones?: {
   categoriaSlug?: string;
   busqueda?: string;
-  orden?: "recientes" | "precio-asc" | "precio-desc";
-}): Promise<Producto[]> {
+  orden?: OrdenCatalogo;
+  /** Base 0. */
+  pagina?: number;
+  porPagina?: number;
+}): Promise<PaginaProductos> {
   const supabase = await crearClienteServidor();
+
+  const pagina = Math.max(0, Math.floor(opciones?.pagina ?? 0));
+  const porPagina = Math.min(60, Math.max(1, opciones?.porPagina ?? POR_PAGINA));
 
   let categoriaId: string | null = null;
   if (opciones?.categoriaSlug) {
@@ -92,38 +142,55 @@ export async function obtenerProductos(opciones?: {
       .select("id")
       .eq("slug", opciones.categoriaSlug)
       .maybeSingle();
-    categoriaId = cat?.id ?? null;
+
+    // Slug que no existe: mejor una lista vacía con su mensaje que el
+    // catálogo completo, que haría pensar que el filtro no funciona.
+    if (!cat) return { productos: [], total: 0, hayMas: false, pagina };
+    categoriaId = cat.id;
   }
 
-  // Se arma una consulta nueva por página: los builders de PostgREST son
-  // mutables y de un solo uso, reutilizar el mismo entre páginas es frágil.
-  const paginaDe = (desde: number, hasta: number) => {
-    let consulta = supabase.from("products").select(CAMPOS_PRODUCTO).eq("activo", true);
-    if (categoriaId) consulta = consulta.eq("category_id", categoriaId);
-    if (opciones?.busqueda?.trim()) consulta = consulta.or(filtroBusqueda(opciones.busqueda));
-    return consulta.order("orden").range(desde, hasta);
+  let consulta = supabase
+    .from("products")
+    .select(CAMPOS_GRILLA, { count: "exact" })
+    .eq("activo", true);
+
+  if (categoriaId) consulta = consulta.eq("category_id", categoriaId);
+  if (opciones?.busqueda?.trim()) consulta = consulta.or(filtroBusqueda(opciones.busqueda));
+
+  // `nullsFirst: false` deja al final los productos todavía sin precio,
+  // que son borradores: nadie quiere abrir el catálogo y encontrárselos.
+  switch (opciones?.orden) {
+    case "precio-asc":
+      consulta = consulta.order("precio_desde", { ascending: true, nullsFirst: false });
+      break;
+    case "precio-desc":
+      consulta = consulta.order("precio_desde", { ascending: false, nullsFirst: false });
+      break;
+    case "nuevos":
+      consulta = consulta.order("created_at", { ascending: false });
+      break;
+    default:
+      consulta = consulta.order("orden").order("created_at", { ascending: false });
+  }
+
+  // Desempate estable: sin él dos productos con el mismo precio pueden
+  // cambiar de sitio entre página y página y salir repetidos o perdidos.
+  consulta = consulta.order("id", { ascending: true });
+
+  const desde = pagina * porPagina;
+  const { data, error, count } = await consulta.range(desde, desde + porPagina - 1);
+
+  if (error) throw new Error(`No se pudieron cargar los productos: ${error.message}`);
+
+  const productos = ((data ?? []) as unknown as FilaProducto[]).map(mapearProducto);
+  const total = count ?? productos.length;
+
+  return {
+    productos,
+    total,
+    hayMas: desde + productos.length < total,
+    pagina,
   };
-
-  // Paginado: con `.limit()` fijo los productos que sobran del tope se caen
-  // del catálogo en silencio a medida que crece la tienda.
-  const filas = await traerTodas<FilaProducto>(paginaDe).catch((e: Error) => {
-    throw new Error(`No se pudieron cargar los productos: ${e.message}`);
-  });
-
-  const productos = filas.map(mapearProducto);
-
-  // El orden por precio se hace en memoria porque el precio surge de los
-  // escalones, no de una columna de la tabla de productos.
-  if (opciones?.orden === "precio-asc" || opciones?.orden === "precio-desc") {
-    const signo = opciones.orden === "precio-asc" ? 1 : -1;
-    productos.sort((a, b) => {
-      const pa = a.escalones.length ? precioDesde(a.escalones) : 0;
-      const pb = b.escalones.length ? precioDesde(b.escalones) : 0;
-      return (pa - pb) * signo;
-    });
-  }
-
-  return productos;
 }
 
 export async function obtenerProductoPorReferencia(
@@ -132,13 +199,33 @@ export async function obtenerProductoPorReferencia(
   const supabase = await crearClienteServidor();
   const { data, error } = await supabase
     .from("products")
-    .select(CAMPOS_PRODUCTO)
+    .select(CAMPOS_DETALLE)
     .eq("referencia", referencia)
     .eq("activo", true)
     .maybeSingle();
 
   if (error) throw new Error(`No se pudo cargar el producto: ${error.message}`);
   return data ? mapearProducto(data as unknown as FilaProducto) : null;
+}
+
+/**
+ * Tonos de un solo producto, para la hoja de selección.
+ * Es la contrapartida de haberlos sacado de la consulta de la grilla.
+ */
+export async function obtenerTonosDeProducto(productoId: string): Promise<Tono[]> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(productoId)) {
+    return [];
+  }
+
+  const supabase = await crearClienteServidor();
+  const { data, error } = await supabase
+    .from("product_shades")
+    .select("id, nombre, color_hex, orden")
+    .eq("product_id", productoId)
+    .order("orden");
+
+  if (error) throw new Error(`No se pudieron cargar los tonos: ${error.message}`);
+  return ordenarTonos((data ?? []).map(mapearTono));
 }
 
 export async function obtenerConfiguracionPublica(): Promise<Record<string, string>> {

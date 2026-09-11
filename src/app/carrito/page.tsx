@@ -6,13 +6,13 @@ export const metadata = { title: "Mi pedido — Anaya Beauty" };
 
 export default function PaginaCarrito() {
   return (
-    <main className="mx-auto max-w-2xl px-4 pb-32">
+    <main className="mx-auto max-w-2xl px-4 pb-40">
       <Link
         href="/"
-        className="inline-flex min-h-[44px] cursor-pointer items-center gap-1 py-4
-                   text-sm font-semibold text-lila transition hover:text-fucsia"
+        className="inline-flex min-h-[52px] cursor-pointer items-center gap-1.5 py-4
+                   font-semibold text-lila-texto transition hover:text-fucsia-texto"
       >
-        <IconoFlechaIzquierda className="h-4 w-4" />
+        <IconoFlechaIzquierda className="h-5 w-5" />
         Seguir comprando
       </Link>
 

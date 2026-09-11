@@ -145,14 +145,14 @@ export default async function PaginaDescuentos() {
                 </div>
 
                 <form action={alternarReglaDescuento.bind(null, r.id, !r.activo)}>
-                  <button className="min-h-[40px] cursor-pointer px-2 text-xs
+                  <button className="min-h-[44px] cursor-pointer px-2 text-xs
                                      text-carbon-suave underline transition hover:text-fucsia">
                     {r.activo ? "Desactivar" : "Activar"}
                   </button>
                 </form>
 
                 <form action={eliminarReglaDescuento.bind(null, r.id)}>
-                  <button className="min-h-[40px] cursor-pointer px-2 text-xs
+                  <button className="min-h-[44px] cursor-pointer px-2 text-xs
                                      text-carbon-suave underline transition hover:text-fucsia">
                     Eliminar
                   </button>

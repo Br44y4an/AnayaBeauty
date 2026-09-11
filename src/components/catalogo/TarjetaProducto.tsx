@@ -2,83 +2,110 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { memo, useState } from "react";
+import dynamic from "next/dynamic";
 import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
-import { usarCarrito, unidadesDeProducto } from "@/lib/cart";
-import { Insignia } from "@/components/ui/Insignia";
-import { VisorImagen } from "@/components/ui/VisorImagen";
-import { SelectorTonos } from "@/components/producto/SelectorTonos";
-import { IconoCorazon, IconoMas, IconoMenos, IconoLupa } from "@/components/ui/Iconos";
-import type { Producto, Tono } from "@/lib/types";
+import { usarCarrito, usarLineasDeProducto, usarUnidadesDeProducto } from "@/lib/cart";
+import {
+  IconoCorazon,
+  IconoMas,
+  IconoMenos,
+  IconoLupa,
+  IconoPaleta,
+  IconoLapiz,
+} from "@/components/ui/Iconos";
+import type { Producto } from "@/lib/types";
 
 /**
- * Tarjeta del catálogo con compra directa.
- *
- * Durante un live, entrar al detalle por cada producto es demasiada
- * fricción: los controles de cantidad viven aquí. El nombre sigue llevando
- * al detalle para quien quiera leer la descripción.
+ * La hoja de tonos y el visor de imagen se descargan al abrirlos, no al
+ * cargar el catálogo. Entre los dos arrastran el selector de tonos, el
+ * agrupador de colores y el visor a pantalla completa: código que la
+ * mayoría de visitas nunca llega a usar y que, multiplicado por una
+ * grilla entera, retrasaba el primer toque útil.
  */
-export function TarjetaProducto({ producto }: { producto: Producto }) {
-  const [tono, setTono] = useState<Tono | null>(null);
-  const [visorAbierto, setVisorAbierto] = useState(false);
+const VisorImagen = dynamic(() =>
+  import("@/components/ui/VisorImagen").then((m) => m.VisorImagen)
+);
+const HojaCompra = dynamic(() =>
+  import("@/components/producto/HojaCompra").then((m) => m.HojaCompra)
+);
 
-  const lineas = usarCarrito((e) => e.lineas);
+/**
+ * Tarjeta del catálogo.
+ *
+ * DOS PROBLEMAS QUE ESTA VERSIÓN ARREGLA
+ *
+ * 1. "Se traba." La tarjeta se suscribía al carrito ENTERO
+ *    (`usarCarrito((e) => e.lineas)`). Con 591 tarjetas en pantalla,
+ *    tocar un "+" cambiaba la lista y React re-renderizaba las 591 — con
+ *    sus imágenes, sus paletas y sus cálculos de precio. Ahora usa
+ *    `usarLineasDeProducto`, que solo cambia si cambia ESTE producto, y
+ *    va envuelta en `memo`.
+ *
+ * 2. "Los tonos son muchísimos y me obligan a verlos." Los círculos de
+ *    color ya no viven aquí. La tarjeta solo dice cuántos tonos hay; la
+ *    paleta aparece en la hoja de compra, y solo si la clienta la pide.
+ *    Eso quita el muro de colores de productos que no le interesan y, de
+ *    paso, saca decenas de miles de filas de la consulta del catálogo.
+ *
+ * El precio que se pinta es el que se está cobrando ahora mismo:
+ * `precioUnitarioPara(escalones, max(1, unidadesEnLaBolsa))`. Nunca el
+ * más barato del combo: mostrar ése confundía porque no coincidía con el
+ * cobro real.
+ */
+function TarjetaProductoBase({ producto }: { producto: Producto }) {
+  const [visorAbierto, setVisorAbierto] = useState(false);
+  const [hojaAbierta, setHojaAbierta] = useState(false);
+
   const agregar = usarCarrito((e) => e.agregar);
   const establecer = usarCarrito((e) => e.establecer);
 
+  // Suscripciones finas: esta tarjeta solo se entera de lo suyo.
+  const lineas = usarLineasDeProducto(producto.id);
+  const yaEnBolsa = usarUnidadesDeProducto(producto.id);
+
   const sinStock = producto.stock === 0;
-  const quedaPoco = producto.stock > 0 && producto.stock <= 5;
+  const sinPrecio = producto.escalones.length === 0;
   const tieneCombo = producto.escalones.length > 1;
-  const necesitaTono = producto.tonos.length > 0;
-  // Los tonos comparten inventario Y escalón de precio: todo lo del producto
-  // en la bolsa cuenta junto, sin importar cómo esté repartido entre tonos.
-  const yaEnBolsa = unidadesDeProducto(lineas, producto.id);
-  const lineasDeEsteProducto = lineas.filter((l) => l.productoId === producto.id);
-  const tonoId = tono?.id ?? null;
-  const enEstaLinea =
-    lineas.find((l) => l.productoId === producto.id && l.tonoId === tonoId)?.cantidad ?? 0;
+  const necesitaTono = producto.numTonos > 0;
   const puedeSumar = yaEnBolsa < producto.stock;
 
-  // El precio que se pinta es el que de verdad se está cobrando ahora mismo:
-  // con la bolsa vacía es el de 1 unidad, y baja solo al alcanzar un escalón.
-  const unitarioActual = producto.escalones.length
-    ? precioUnitarioPara(producto.escalones, Math.max(1, yaEnBolsa))
-    : null;
+  const unitarioActual = sinPrecio
+    ? null
+    : precioUnitarioPara(producto.escalones, Math.max(1, yaEnBolsa));
 
-  // El empujón cuenta el producto completo: "suma 1 más" puede cumplirse
-  // agregando cualquier tono, porque todos suman al mismo escalón.
   const upsell =
-    yaEnBolsa > 0 ? sugerenciaUpsell(producto.escalones, yaEnBolsa) : null;
+    !sinPrecio && yaEnBolsa > 0
+      ? sugerenciaUpsell(producto.escalones, yaEnBolsa)
+      : null;
   const upsellAlcanzable = upsell !== null && upsell.nuevaCantidad <= producto.stock;
 
-  function sumar() {
+  // Sin tonos hay una sola línea posible: se puede sumar desde la tarjeta.
+  const lineaUnica = !necesitaTono ? (lineas[0] ?? null) : null;
+
+  function sumarDirecto() {
     if (!puedeSumar) return;
-    agregar(producto.id, 1, tono);
+    agregar(producto.id, 1, null);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       navigator.vibrate?.(10);
     }
   }
 
   const botonRedondo =
-    "flex h-10 w-10 cursor-pointer items-center justify-center rounded-full " +
-    "transition duration-200 focus-visible:outline-none focus-visible:ring-2 " +
-    "focus-visible:ring-fucsia disabled:opacity-30 disabled:cursor-not-allowed";
+    "flex h-11 w-11 cursor-pointer items-center justify-center rounded-full " +
+    "transition duration-200 disabled:opacity-30 disabled:cursor-not-allowed";
 
   return (
     <>
-      <article
-        className="flex flex-col overflow-hidden rounded-tarjeta bg-petalo shadow-petalo
-                   transition duration-200 hover:shadow-flotante"
-      >
+      <article className="flex flex-col overflow-hidden rounded-tarjeta bg-petalo shadow-petalo">
         {/* Imagen: abre el visor en alta resolución */}
         <button
           type="button"
           onClick={() => producto.imagenPrincipal && setVisorAbierto(true)}
           disabled={!producto.imagenPrincipal}
-          aria-label={`Ver ${producto.nombre} en grande`}
-          className="group relative aspect-square cursor-pointer bg-rosa-nube
-                     focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fucsia"
+          aria-label={`Ver la foto de ${producto.nombre} en grande`}
+          className="group relative aspect-square cursor-pointer bg-rosa-nube"
         >
           {producto.imagenPrincipal ? (
             <>
@@ -86,149 +113,154 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
                 src={producto.imagenPrincipal}
                 alt={producto.nombre}
                 fill
-                sizes="(max-width: 768px) 50vw, 25vw"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 className="object-cover transition duration-300 group-hover:scale-105"
               />
               <span
-                className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center
+                className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center
                            rounded-full bg-petalo/90 text-carbon shadow-petalo"
+                aria-hidden="true"
               >
-                <IconoLupa className="h-4 w-4" />
+                <IconoLupa className="h-5 w-5" />
               </span>
             </>
           ) : (
-            <div className="flex h-full items-center justify-center text-lila-suave">
-              <IconoCorazon className="h-10 w-10" />
-            </div>
-          )}
-
-          {tieneCombo && !sinStock && (
-            <span
-              className="absolute left-2 top-2 rounded-pastilla bg-lila px-2.5 py-1
-                         text-[10px] font-bold uppercase tracking-wide text-petalo"
-            >
-              Combo
+            <span className="flex h-full items-center justify-center text-lila-suave">
+              <IconoCorazon className="h-12 w-12" />
             </span>
           )}
 
+          <span className="absolute left-2 top-2 flex flex-col items-start gap-1">
+            {tieneCombo && !sinStock && (
+              <span className="rounded-pastilla bg-lila-texto px-2.5 py-1 text-xs font-bold text-petalo">
+                Combo
+              </span>
+            )}
+            {yaEnBolsa > 0 && (
+              <span className="rounded-pastilla bg-fucsia px-2.5 py-1 text-xs font-bold text-petalo">
+                {yaEnBolsa} en tu bolsa
+              </span>
+            )}
+          </span>
+
           {sinStock && (
-            <div className="absolute inset-0 flex items-center justify-center bg-petalo/80">
-              <span className="font-display text-lg text-carbon-suave">Agotado</span>
-            </div>
+            <span className="absolute inset-0 flex items-center justify-center bg-petalo/85">
+              <span className="font-display text-xl text-carbon-suave">Agotado</span>
+            </span>
           )}
         </button>
 
         <div className="flex flex-1 flex-col gap-2 p-3">
           <div>
-            <p className="text-[11px] font-bold tracking-wide text-lila">
+            <p className="text-xs font-bold tracking-wide text-lila-texto">
               {producto.referencia}
             </p>
 
             <Link
-              // Codificada: hay referencias con "/" y espacios (ACRYLIC80/150,
-              // A05 ESPEJO) y sin escapar el "/" parte la ruta en dos y da 404.
+              // Codificada: hay referencias con "/" y espacios
+              // (ACRYLIC80/150, A05 ESPEJO) y sin escapar el "/" la ruta
+              // se parte en dos y da 404.
               href={`/producto/${encodeURIComponent(producto.referencia)}`}
-              className="line-clamp-2 text-sm font-semibold leading-snug text-carbon
-                         transition hover:text-fucsia focus-visible:outline-none
-                         focus-visible:ring-2 focus-visible:ring-fucsia"
+              className="line-clamp-2 text-[15px] font-semibold leading-snug text-carbon
+                         transition hover:text-fucsia-texto"
             >
               {producto.nombre}
             </Link>
           </div>
 
-          {unitarioActual !== null && (
-            <p className="text-base font-bold text-fucsia">
+          {unitarioActual !== null ? (
+            <p className="text-lg font-bold text-fucsia-texto">
               {pesos(unitarioActual)}
-              <span className="text-[11px] font-normal text-carbon-suave"> c/u</span>
+              <span className="text-xs font-normal text-carbon-suave"> c/u</span>
+            </p>
+          ) : (
+            <p className="text-sm text-carbon-suave">Precio por confirmar</p>
+          )}
+
+          {!sinStock && producto.stock <= 5 && (
+            <p className="text-sm font-semibold text-alerta">
+              Quedan {producto.stock}
             </p>
           )}
 
-          {quedaPoco && <Insignia tono="alerta">Quedan {producto.stock}</Insignia>}
-
-          {!sinStock && producto.escalones.length > 0 && (
+          {!sinStock && !sinPrecio && (
             <div className="mt-auto space-y-2 pt-1">
-              {necesitaTono && (
-                <SelectorTonos
-                  tonos={producto.tonos}
-                  elegido={tono}
-                  alElegir={setTono}
-                  compacto
-                />
-              )}
-
-              {necesitaTono && !tono ? (
-                <p className="rounded-pastilla bg-rosa-nube py-2 text-center text-[11px]
-                              font-semibold text-carbon-suave">
-                  Elige un tono para agregar
-                </p>
-              ) : enEstaLinea === 0 ? (
+              {necesitaTono ? (
+                /* Con tonos: la paleta vive en la hoja, no aquí. Un solo
+                   botón claro en vez de un muro de círculos. */
                 <button
-                  onClick={sumar}
-                  disabled={!puedeSumar}
-                  className="flex min-h-[40px] w-full cursor-pointer items-center justify-center
-                             gap-1 rounded-pastilla bg-fucsia text-sm font-semibold text-petalo
-                             transition duration-200 hover:brightness-110
-                             focus-visible:outline-none focus-visible:ring-2
-                             focus-visible:ring-fucsia disabled:opacity-40"
+                  onClick={() => setHojaAbierta(true)}
+                  className="flex min-h-[48px] w-full cursor-pointer items-center
+                             justify-center gap-2 rounded-pastilla bg-fucsia px-3
+                             text-[15px] font-semibold text-petalo transition
+                             duration-200 hover:brightness-110"
                 >
-                  <IconoMas className="h-4 w-4" /> Agregar
-                </button>
-              ) : (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      aria-label={`Quitar uno de ${producto.nombre}`}
-                      onClick={() => establecer(producto.id, tonoId, enEstaLinea - 1)}
-                      className={`${botonRedondo} border-2 border-fucsia-suave text-fucsia`}
-                    >
-                      <IconoMenos className="h-4 w-4" />
-                    </button>
-
-                    <span className="font-display text-xl text-carbon">{enEstaLinea}</span>
-
-                    <button
-                      aria-label={`Agregar uno de ${producto.nombre}`}
-                      onClick={sumar}
-                      disabled={!puedeSumar}
-                      className={`${botonRedondo} bg-fucsia text-petalo`}
-                    >
-                      <IconoMas className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <p className="text-center text-sm font-bold text-fucsia">
-                    {pesos((unitarioActual ?? 0) * enEstaLinea)}
-                  </p>
-
-                  {upsellAlcanzable && (
-                    <p className="rounded-suave bg-lila-suave/40 px-2 py-1 text-center
-                                  text-[11px] leading-tight text-lila">
-                      ✨ Suma {upsell.unidadesFaltantes} y ahorras{" "}
-                      <strong>{pesos(upsell.ahorro)}</strong>
-                    </p>
+                  {yaEnBolsa > 0 ? (
+                    <>
+                      <IconoLapiz className="h-5 w-5" /> Cambiar
+                    </>
+                  ) : (
+                    <>
+                      <IconoPaleta className="h-5 w-5" /> Elegir tono
+                    </>
                   )}
+                </button>
+              ) : lineaUnica ? (
+                /* Sin tonos: sumar y restar desde la tarjeta, que es el
+                   camino más corto durante un live. */
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    aria-label={`Quitar uno de ${producto.nombre}`}
+                    onClick={() =>
+                      establecer(producto.id, null, lineaUnica.cantidad - 1)
+                    }
+                    className={`${botonRedondo} border-2 border-fucsia-suave text-fucsia-texto`}
+                  >
+                    <IconoMenos className="h-5 w-5" />
+                  </button>
+
+                  <span
+                    aria-live="polite"
+                    className="font-display text-2xl text-carbon"
+                  >
+                    {lineaUnica.cantidad}
+                  </span>
+
+                  <button
+                    aria-label={`Agregar uno de ${producto.nombre}`}
+                    onClick={sumarDirecto}
+                    disabled={!puedeSumar}
+                    className={`${botonRedondo} bg-fucsia text-petalo`}
+                  >
+                    <IconoMas className="h-5 w-5" />
+                  </button>
                 </div>
+              ) : (
+                <button
+                  onClick={sumarDirecto}
+                  disabled={!puedeSumar}
+                  className="flex min-h-[48px] w-full cursor-pointer items-center
+                             justify-center gap-1 rounded-pastilla bg-fucsia px-3
+                             text-[15px] font-semibold text-petalo transition
+                             duration-200 hover:brightness-110 disabled:opacity-40"
+                >
+                  <IconoMas className="h-5 w-5" /> Agregar
+                </button>
               )}
 
-              {/* Al cambiar de tono se pierde de vista lo ya agregado en los
-                  otros tonos de este mismo producto: este resumen lo deja
-                  siempre visible, cada tono con su propia cantidad. */}
-              {necesitaTono && lineasDeEsteProducto.length > 0 && (
-                <ul className="space-y-1 rounded-suave bg-rosa-nube px-2 py-1.5">
-                  {lineasDeEsteProducto.map((l) => (
-                    <li
-                      key={l.tonoId ?? "sin-tono"}
-                      className="flex items-center justify-between gap-2 text-[11px] text-carbon"
-                    >
-                      <span className="truncate">
-                        {l.tonoNombre ?? "Sin tono"} · x{l.cantidad}
-                      </span>
-                      <span className="shrink-0 font-semibold text-fucsia">
-                        {pesos((unitarioActual ?? 0) * l.cantidad)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+              {yaEnBolsa > 0 && unitarioActual !== null && (
+                <p className="text-center text-[15px] font-bold text-fucsia-texto">
+                  {pesos(unitarioActual * yaEnBolsa)}
+                  <span className="font-normal text-carbon-suave"> en total</span>
+                </p>
+              )}
+
+              {upsellAlcanzable && (
+                <p className="rounded-suave bg-lila-suave/40 px-2 py-1.5 text-center
+                              text-xs leading-tight text-lila-texto">
+                  ✨ Suma {upsell.unidadesFaltantes} y ahorras{" "}
+                  <strong>{pesos(upsell.ahorro)}</strong>
+                </p>
               )}
             </div>
           )}
@@ -242,6 +274,17 @@ export function TarjetaProducto({ producto }: { producto: Producto }) {
           alCerrar={() => setVisorAbierto(false)}
         />
       )}
+
+      {hojaAbierta && (
+        <HojaCompra producto={producto} alCerrar={() => setHojaAbierta(false)} />
+      )}
     </>
   );
 }
+
+/**
+ * `memo` es lo que remata el arreglo de rendimiento: aunque la lista
+ * vuelva a renderizarse (al cargar otra tanda, por ejemplo), las tarjetas
+ * cuyo `producto` no cambió no hacen nada.
+ */
+export const TarjetaProducto = memo(TarjetaProductoBase);

@@ -6,7 +6,7 @@ const datos = {
   nombre: "Laura Gómez",
   whatsapp: "3001234567",
   ciudad: "Medellín",
-  codigo: "4821",
+  notas: null,
   subtotal: 74000,
   descuento: 0,
   porcentaje: 0,
@@ -26,7 +26,9 @@ describe("plantillaCorreoPedido", () => {
     expect(html).toContain("Laura Gómez");
     expect(html).toContain("3001234567");
     expect(html).toContain("Medellín");
-    expect(html).toContain("4821");
+    // Ya no hay códigos: en su lugar viaja la nota de la clienta, que es
+    // lo que de verdad necesita quien despacha.
+    expect(html).not.toContain("Código usado");
   });
 
   it("lista cada producto con su referencia y subtotal", () => {

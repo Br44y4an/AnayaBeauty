@@ -82,18 +82,72 @@ describe("carrito", () => {
     expect(unidadesDeProducto(usarCarrito.getState().lineas, "p1")).toBe(5);
   });
 
-  it("guarda el código que llega por el link mágico", () => {
-    usarCarrito.getState().guardarCodigo("4821");
-    expect(usarCarrito.getState().codigo).toBe("4821");
-  });
-
-  it("vaciar borra las líneas y el código", () => {
+  it("vaciar borra las líneas y la clave de envío", () => {
     usarCarrito.getState().agregar("p1", 1, CEREZA);
-    usarCarrito.getState().guardarCodigo("4821");
+    usarCarrito.getState().prepararEnvio();
     usarCarrito.getState().vaciar();
 
     expect(usarCarrito.getState().lineas).toEqual([]);
-    expect(usarCarrito.getState().codigo).toBeNull();
+    expect(usarCarrito.getState().claveEnvio).toBeNull();
+  });
+});
+
+describe("clave de envío (reintento seguro)", () => {
+  beforeEach(() => usarCarrito.getState().vaciar());
+
+  it("devuelve la MISMA clave mientras la bolsa no cambie", () => {
+    // Es lo que hace que un doble toque en "Confirmar" no cree dos
+    // pedidos: la segunda llamada llega con la misma clave y el servidor
+    // devuelve el pedido que ya creó.
+    usarCarrito.getState().agregar("p1", 1, CEREZA);
+
+    const primera = usarCarrito.getState().prepararEnvio();
+    const segunda = usarCarrito.getState().prepararEnvio();
+
+    expect(primera).toBe(segunda);
+    expect(primera).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it("renueva la clave en cuanto la bolsa cambia", () => {
+    // Si la clienta vuelve atrás y agrega algo más, ese pedido es otro
+    // pedido: reusar la clave devolvería el anterior sin lo nuevo.
+    usarCarrito.getState().agregar("p1", 1, CEREZA);
+    const primera = usarCarrito.getState().prepararEnvio();
+
+    usarCarrito.getState().agregar("p2", 1);
+    expect(usarCarrito.getState().claveEnvio).toBeNull();
+
+    const segunda = usarCarrito.getState().prepararEnvio();
+    expect(segunda).not.toBe(primera);
+  });
+
+  it("también se renueva al cambiar cantidades o quitar líneas", () => {
+    usarCarrito.getState().agregar("p1", 2, CEREZA);
+
+    usarCarrito.getState().prepararEnvio();
+    usarCarrito.getState().establecer("p1", "t1", 3);
+    expect(usarCarrito.getState().claveEnvio).toBeNull();
+
+    usarCarrito.getState().prepararEnvio();
+    usarCarrito.getState().quitar("p1", "t1");
+    expect(usarCarrito.getState().claveEnvio).toBeNull();
+  });
+});
+
+describe("identidad de las líneas (rendimiento)", () => {
+  beforeEach(() => usarCarrito.getState().vaciar());
+
+  it("conserva la referencia de las líneas que no se tocan", () => {
+    // De esto depende que la tarjeta de un producto NO se vuelva a
+    // pintar cuando cambia otro: useShallow compara por referencia.
+    usarCarrito.getState().agregar("p1", 1, CEREZA);
+    usarCarrito.getState().agregar("p2", 1);
+
+    const antes = usarCarrito.getState().lineas.find((l) => l.productoId === "p2");
+    usarCarrito.getState().establecer("p1", "t1", 5);
+    const despues = usarCarrito.getState().lineas.find((l) => l.productoId === "p2");
+
+    expect(despues).toBe(antes);
   });
 
   it("ignora cantidades inválidas", () => {

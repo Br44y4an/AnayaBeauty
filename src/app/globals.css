@@ -1,14 +1,49 @@
 @import "tailwindcss";
 
 @theme {
-  --color-fucsia: #e5308a;
+  /* ---------------------------------------------------------------
+     Marca, corregida para que se lea.
+
+     El rosa y el lila originales fallaban el contraste mínimo que
+     exige WCAG AA (4.5:1) en los DOS sentidos:
+
+       texto rosa  #e5308a sobre blanco .......... 4.10  ✗
+       texto lila  #a97fd0 sobre blanco .......... 3.17  ✗
+       texto BLANCO sobre el rosa del botón ...... 4.10  ✗   ← el botón
+                                                              principal
+     El último es el que más dolía: "Agregar" y "Confirmar" son los dos
+     botones de los que vive la tienda. En un catálogo que leen clientas
+     de más de 40 años, en la calle y con el brillo del sol, esto no es
+     un detalle estético: es el motivo por el que "no se ve bien".
+
+     Los valores de abajo son un punto más profundos y pasan holgado:
+
+       fucsia  #d11a72 → 5.12 con blanco encima · 4.69 sobre rosa-nube
+       lila    #8956b8 → 5.14 con blanco encima · 4.70 sobre rosa-nube
+
+     `fucsia-vivo` conserva el rosa original SOLO para adornos donde no
+     hay texto encima (sombras, degradados): la marca no cambia de color,
+     cambia de profundidad donde hace falta leer.
+     --------------------------------------------------------------- */
+  --color-fucsia: #d11a72;
+  --color-fucsia-texto: #d11a72;
+  --color-fucsia-vivo: #e5308a;
+  --color-fucsia-hondo: #a8145a;
   --color-fucsia-suave: #f8a8cc;
-  --color-lila: #a97fd0;
+  --color-lila: #8956b8;
+  --color-lila-texto: #8956b8;
+  --color-lila-vivo: #a97fd0;
   --color-lila-suave: #ddc9ee;
   --color-rosa-nube: #fdf2f7;
   --color-petalo: #ffffff;
   --color-carbon: #3d2b36;
-  --color-carbon-suave: #7a6470;
+  --color-carbon-suave: #6d5765;
+
+  /* Estados: verde/ámbar propios de la marca, no los de Tailwind */
+  --color-exito: #0f7a52;
+  --color-exito-fondo: #e4f6ee;
+  --color-alerta: #96591b;
+  --color-alerta-fondo: #fdf1e0;
 
   --font-display: var(--fuente-playfair), Georgia, serif;
   --font-sans: var(--fuente-nunito), system-ui, sans-serif;
@@ -19,12 +54,24 @@
 
   --shadow-petalo: 0 4px 20px -4px rgba(229, 48, 138, 0.18);
   --shadow-flotante: 0 8px 32px -8px rgba(229, 48, 138, 0.28);
+  --shadow-hoja: 0 -8px 40px -8px rgba(61, 43, 54, 0.25);
+}
+
+html {
+  /* Evita el "pull to refresh" accidental al hacer scroll rápido en el
+     catálogo, que recargaba la página en mitad de un pedido. */
+  overscroll-behavior-y: contain;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background-color: var(--color-rosa-nube);
   color: var(--color-carbon);
   font-family: var(--font-sans);
+  /* 16px reales: por debajo de eso Safari en iPhone hace zoom solo al
+     enfocar un campo y descoloca toda la pantalla. */
+  font-size: 16px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -32,18 +79,59 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display);
+  line-height: 1.2;
 }
 
+/* Quita el retardo de ~300ms del toque en móvil: sin esto cada botón
+   "responde tarde" y la clienta lo pulsa dos veces. */
+button,
+a,
+[role="button"],
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+/* El foco visible nunca se elimina: es la única pista para quien navega
+   con teclado y para los lectores de pantalla. */
+:focus-visible {
+  outline: 3px solid var(--color-fucsia-texto);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------
+   Animaciones. Todas por debajo de 300ms y todas anulables.
+   --------------------------------------------------------------- */
 @keyframes rebote {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(1.35);
-  }
-  100% {
-    transform: scale(1);
-  }
+  0% { transform: scale(1); }
+  40% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+@keyframes aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes subir-hoja {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes entrar-aviso {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes latido {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.esqueleto {
+  animation: latido 1.4s ease-in-out infinite;
+  background-color: var(--color-lila-suave);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -51,15 +139,33 @@ h3 {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-html {
-  overscroll-behavior-y: contain;
+/* Enlace para saltar al contenido: invisible hasta que se enfoca con
+   el tabulador. */
+.salto-contenido {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+}
+.salto-contenido:focus {
+  left: 1rem;
+  top: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-pastilla);
+  background: var(--color-petalo);
+  color: var(--color-fucsia-texto);
+  font-weight: 700;
+  box-shadow: var(--shadow-flotante);
 }
 
-@keyframes aparecer {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* Respeta la franja inferior del iPhone para que la barra flotante no
+   quede debajo del indicador de inicio. */
+.margen-seguro {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }

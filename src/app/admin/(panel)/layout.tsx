@@ -3,7 +3,6 @@ import { cerrarSesion } from "../login/actions";
 
 const ENLACES = [
   { href: "/admin", texto: "Pedidos" },
-  { href: "/admin/codigos", texto: "Códigos" },
   { href: "/admin/productos", texto: "Productos" },
   { href: "/admin/categorias", texto: "Categorías" },
   { href: "/admin/descuentos", texto: "Descuentos" },
@@ -26,7 +25,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
               <Link
                 key={e.href}
                 href={e.href}
-                className="min-h-[40px] cursor-pointer whitespace-nowrap rounded-pastilla
+                className="min-h-[44px] cursor-pointer whitespace-nowrap rounded-pastilla
                            px-3 py-2 text-sm font-semibold text-carbon-suave transition
                            duration-200 hover:bg-rosa-nube hover:text-fucsia
                            focus-visible:outline-none focus-visible:ring-2
@@ -38,7 +37,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
           </nav>
 
           <form action={cerrarSesion} className="shrink-0">
-            <button className="min-h-[40px] cursor-pointer whitespace-nowrap px-2 text-xs
+            <button className="min-h-[44px] cursor-pointer whitespace-nowrap px-2 text-xs
                                text-carbon-suave underline transition hover:text-fucsia">
               Salir
             </button>

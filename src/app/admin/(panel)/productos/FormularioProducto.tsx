@@ -229,7 +229,7 @@ export function FormularioProducto({
               <button
                 type="button"
                 onClick={() => setEscalones((p) => p.filter((_, j) => j !== i))}
-                className="min-h-[40px] cursor-pointer px-2 text-xs text-carbon-suave
+                className="min-h-[44px] cursor-pointer px-2 text-xs text-carbon-suave
                            underline transition hover:text-fucsia"
               >
                 quitar
@@ -249,7 +249,7 @@ export function FormularioProducto({
               },
             ])
           }
-          className="inline-flex min-h-[40px] cursor-pointer items-center gap-1
+          className="inline-flex min-h-[44px] cursor-pointer items-center gap-1
                      rounded-pastilla border-2 border-fucsia-suave px-4 text-sm
                      font-semibold text-fucsia transition hover:border-fucsia"
         >
@@ -324,7 +324,7 @@ export function FormularioProducto({
             <button
               type="button"
               onClick={() => setTonos((p) => p.filter((_, j) => j !== i))}
-              className="min-h-[40px] cursor-pointer px-2 text-xs text-carbon-suave
+              className="min-h-[44px] cursor-pointer px-2 text-xs text-carbon-suave
                          underline transition hover:text-fucsia"
             >
               quitar
@@ -335,7 +335,7 @@ export function FormularioProducto({
         <button
           type="button"
           onClick={() => setTonos((p) => [...p, { nombre: "", colorHex: "#E5308A" }])}
-          className="inline-flex min-h-[40px] cursor-pointer items-center gap-1
+          className="inline-flex min-h-[44px] cursor-pointer items-center gap-1
                      rounded-pastilla border-2 border-lila-suave px-4 text-sm
                      font-semibold text-lila transition hover:border-lila"
         >

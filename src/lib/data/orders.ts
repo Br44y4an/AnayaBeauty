@@ -6,7 +6,7 @@ import { filtroBusqueda } from "@/lib/data/busqueda";
 const CAMPOS_PEDIDO = `
   id, numero_pedido, cliente_nombre, cliente_whatsapp, cliente_ciudad,
   subtotal, descuento, porcentaje_descuento, por_mayor,
-  total, estado, notas_admin, created_at,
+  total, estado, notas_admin, notas_cliente, created_at,
   access_codes!orders_code_id_fkey ( code ),
   order_items ( id, referencia_snapshot, nombre_snapshot, tono_snapshot, cantidad,
                 precio_unitario_aplicado, subtotal )
@@ -25,6 +25,7 @@ type FilaPedido = {
   total: number;
   estado: EstadoPedido;
   notas_admin: string | null;
+  notas_cliente: string | null;
   created_at: string;
   access_codes: { code: string } | { code: string }[] | null;
   order_items:
@@ -49,6 +50,7 @@ function mapearPedido(fila: FilaPedido): Pedido {
     clienteNombre: fila.cliente_nombre,
     clienteWhatsapp: fila.cliente_whatsapp,
     clienteCiudad: fila.cliente_ciudad,
+    notasCliente: fila.notas_cliente ?? null,
     subtotal: fila.subtotal ?? fila.total,
     descuento: fila.descuento ?? 0,
     porcentajeDescuento: fila.porcentaje_descuento ?? 0,

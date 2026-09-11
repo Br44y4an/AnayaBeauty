@@ -20,12 +20,14 @@ const labial: Producto = {
     { minCantidad: 3, precioUnitario: 9000 },
     { minCantidad: 6, precioUnitario: 8000 },
   ],
+  numTonos: 0,
   tonos: [],
 };
 
 const conTonos: Producto = {
   ...labial,
   stock: 10,
+  numTonos: 2,
   tonos: [
     { id: "t1", nombre: "Cereza", colorHex: "#C81E4A", orden: 0 },
     { id: "t2", nombre: "Vino", colorHex: "#6E1E38", orden: 1 },
@@ -105,7 +107,7 @@ describe("PanelCompra con tonos", () => {
     render(<PanelCompra producto={conTonos} />);
 
     fireEvent.click(screen.getByRole("radio", { name: "Cereza" }));
-    expect(screen.getByText(/tono: cereza/i)).toBeInTheDocument();
+    expect(screen.getByText(/elegiste: cereza/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /agregar/i }));
 

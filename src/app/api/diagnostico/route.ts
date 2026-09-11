@@ -95,12 +95,12 @@ export async function GET(peticion: Request) {
 
   // --- Correo completo con la plantilla real ---
   if (url.searchParams.get("correo") === "1") {
-    await enviarCorreoPedido({
+    const resultado = await enviarCorreoPedido({
       numeroPedido: "AB-PRUEBA",
       nombre: "Pedido de prueba del sistema",
       whatsapp: "3228813646",
       ciudad: "Medellín",
-      codigo: "0000",
+      notas: "Nota de prueba: verificando que el aviso llegue completo.",
       subtotal: 74000,
       descuento: 3700,
       porcentaje: 5,
@@ -113,7 +113,12 @@ export async function GET(peticion: Request) {
       ],
     });
 
-    revisiones.correoDePrueba = "enviado con la plantilla real; revisa la bandeja";
+    // Se reporta lo que realmente pasó: antes esta línea decía "enviado"
+    // aunque Resend hubiera rechazado el correo, que es justo el caso que
+    // se estaba tratando de diagnosticar.
+    revisiones.correoDePrueba = resultado.ok
+      ? { ok: true, id: resultado.id, mensaje: "enviado con la plantilla real; revisa la bandeja" }
+      : { ok: false, motivo: resultado.motivo };
   }
 
   return NextResponse.json({ revisado: new Date().toISOString(), ...revisiones });

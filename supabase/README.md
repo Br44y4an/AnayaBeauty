@@ -4,16 +4,28 @@ Ejecuta estos archivos en el editor SQL de Supabase, **en este orden**:
 
 1. `schema.sql` — tablas, índices y configuración inicial
 2. `policies.sql` — reglas de seguridad (Row Level Security)
-3. `functions.sql` — funciones de pedidos y códigos
+3. `functions.sql` — funciones de pedidos
 4. `migracion-v2.sql` — tonos de color, precio por mayor y descuentos por
    monto; también reemplaza `crear_pedido` por la versión que de verdad
    aplica esos beneficios (la de `functions.sql` sola no los tiene)
-5. `tests.sql` — verificación; debe terminar con "TODAS LAS PRUEBAS PASARON"
+5. `migracion-v3.sql` — el escalón de precio lo decide la cantidad total del
+   producto, sumando todos sus tonos
+6. **`migracion-v4.sql`** — pedido sin código de acceso, reintento seguro por
+   clave de idempotencia, límite por dispositivo y columnas calculadas
+   (`precio_desde`, `precio_base`, `num_tonos`) que permiten paginar y ordenar
+   el catálogo en la base
+7. `tests-v4.sql` — verificación; debe terminar con "TODAS LAS PRUEBAS PASARON"
 
-Los cinco archivos son idempotentes: puedes volver a ejecutarlos sin dañar
-los datos existentes. `tests.sql` no cubre tonos/descuentos/precio por
-mayor todavía — para eso corre `node --env-file=.env.local
-scripts/probar-descuentos.mjs` contra la base real.
+Todos son idempotentes: puedes volver a ejecutarlos sin dañar los datos
+existentes, y `tests-v4.sql` termina en `rollback`, así que no deja rastro.
+
+> `tests.sql` quedó obsoleto: probaba el flujo con código de acceso, que la v4
+> eliminó.
+
+**Orden de despliegue:** primero el SQL, después la web. La v4 cambia la firma
+de `crear_pedido` y añade columnas que el catálogo consulta, así que publicar
+la web antes deja la tienda sin cargar. Para comprobarlo:
+`node --env-file=.env.local scripts/verificar-migracion.mjs`.
 
 ## Storage
 

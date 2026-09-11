@@ -1,10 +1,16 @@
 import Image from "next/image";
 
+/**
+ * Portada del catálogo.
+ *
+ * El banner se recorta en celular (`max-h` + `object-cover`) en vez de
+ * ocupar toda su altura: con la proporción original, en un teléfono no
+ * cabía ni un producto en la primera pantalla y había que hacer scroll a
+ * ciegas para ver que esto era una tienda.
+ */
 export function Encabezado() {
   return (
     <header>
-      {/* El banner ya trae el logo, el mensaje de marca y el WhatsApp:
-          se usa tal cual como portada, a ancho completo. */}
       <div className="relative -mx-4 overflow-hidden md:mx-0 md:rounded-tarjeta md:shadow-petalo">
         <Image
           src="/banner.png"
@@ -13,12 +19,16 @@ export function Encabezado() {
           height={670}
           priority
           sizes="(max-width: 768px) 100vw, 1152px"
-          className="h-auto w-full"
+          className="max-h-[38vh] w-full object-cover md:max-h-none"
         />
       </div>
 
-      <p className="pt-5 text-center font-display text-2xl leading-tight text-fucsia">Consiéntete hoy</p>
-      <p className="pb-1 text-center text-sm text-carbon-suave">Mientras más llevas, mejor precio ✨</p>
+      <h1 className="pt-4 text-center font-display text-2xl leading-tight text-fucsia-texto">
+        Consiéntete hoy
+      </h1>
+      <p className="text-center text-carbon-suave">
+        Arma tu pedido y confírmalo en un minuto ✨
+      </p>
     </header>
   );
 }

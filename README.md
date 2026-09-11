@@ -1,12 +1,15 @@
 # Anaya Beauty — Catálogo digital
 
-Catálogo de maquillaje con pedidos por código de un solo uso, pensado para
-vender en transmisiones en vivo de TikTok.
+Catálogo de maquillaje pensado para vender en transmisiones en vivo de TikTok.
 
 Las clientas entran por un QR, arman su pedido con precios que bajan según la
-cantidad, y lo confirman con un código de 4 dígitos que la administradora
-entrega por WhatsApp solo tras verificar el pago. Cada pedido llega al panel en
-tiempo real y por correo.
+cantidad, y **lo confirman en el momento**, sin códigos ni esperas. El cobro se
+coordina después por WhatsApp y se verifica a mano. Cada pedido llega al panel
+en tiempo real y por correo.
+
+> **v4:** desapareció el código de 4 dígitos y la bolsa y la confirmación se
+> juntaron en una sola pantalla. Antes de desplegar hay que ejecutar
+> `supabase/migracion-v4.sql` — ver [SETUP.md](SETUP.md).
 
 **Guía de puesta en marcha:** [SETUP.md](SETUP.md)
 **Diseño y decisiones:** [docs/superpowers/specs/](docs/superpowers/specs/)
@@ -27,13 +30,18 @@ npm run dev
 ## Pruebas
 
 ```bash
-npm test            # 56 pruebas: precios, carrito, CSV, correo, formato
+npm test            # 211 pruebas: precios, carrito, tonos, contraste, correo…
 npm run build       # verificación de tipos y compilación
 ```
 
 La lógica de negocio en la base de datos se verifica ejecutando
-`supabase/tests.sql` en el editor SQL de Supabase: 9 comprobaciones que cubren
-códigos reusados, stock insuficiente, cancelaciones y fuerza bruta.
+`supabase/tests-v4.sql` en el editor SQL de Supabase: 12 comprobaciones —dentro
+de una transacción que termina en `rollback`, así que es seguro correrlas en
+producción— que cubren precios, tonos, reintentos duplicados, stock
+insuficiente, cancelaciones y límite por dispositivo.
+
+Antes de desplegar, `node --env-file=.env.local scripts/verificar-migracion.mjs`
+comprueba que la base tenga aplicado todo lo que el código espera.
 
 ## Cómo está organizado
 
@@ -54,10 +62,17 @@ producto y cantidad. El total se recalcula en PostgreSQL al confirmar, leyendo
 los escalones desde la base. Un carrito manipulado no puede cambiar lo que se
 cobra.
 
-**Confirmar un pedido es una sola operación indivisible.** Validar el código,
-verificar el stock, calcular precios, descontar inventario, guardar el pedido y
-quemar el código ocurren juntos o no ocurren. Si falla el stock, el código no se
-gasta y el inventario no se mueve.
+**Confirmar un pedido es una sola operación indivisible.** Verificar el stock,
+calcular precios, descontar inventario y guardar el pedido ocurren juntos o no
+ocurren. Si falla el stock, no se mueve nada.
+
+**Un pedido enviado dos veces sigue siendo un pedido.** El navegador manda una
+clave de idempotencia; si llega repetida (doble toque, reintento por mala
+señal), el servidor devuelve el pedido que ya creó en vez de duplicarlo.
+
+**Lo que el carrito muestra es exactamente lo que se envía.** Una sola función
+(`reconciliarCarrito`) decide qué se puede pedir, y la usan tanto la pantalla
+como el formulario.
 
 ## Scripts útiles
 

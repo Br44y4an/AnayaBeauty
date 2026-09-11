@@ -11,9 +11,9 @@ import type { Pedido, EstadoPedido } from "@/lib/types";
 const ESTADOS: EstadoPedido[] = ["nuevo", "pagado", "enviado", "cancelado"];
 
 const COLOR_ESTADO: Record<EstadoPedido, string> = {
-  nuevo: "bg-fucsia/10 text-fucsia",
-  pagado: "bg-lila-suave/50 text-lila",
-  enviado: "bg-emerald-100 text-emerald-700",
+  nuevo: "bg-fucsia/10 text-fucsia-texto",
+  pagado: "bg-lila-suave/50 text-lila-texto",
+  enviado: "bg-exito-fondo text-exito",
   cancelado: "bg-gray-100 text-gray-500",
 };
 
@@ -69,7 +69,7 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
               <p className="text-sm font-semibold text-carbon">{p.clienteNombre}</p>
               <p className="text-xs text-carbon-suave">
                 {p.clienteWhatsapp} · {p.clienteCiudad}
-                {p.codigoUsado && ` · código ${p.codigoUsado}`}
+                
               </p>
               <p className="text-xs text-carbon-suave">
                 {new Date(p.creadoEn).toLocaleString("es-CO", {
@@ -80,9 +80,9 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
             </div>
 
             <div className="shrink-0 text-right">
-              <p className="font-bold text-fucsia">{pesos(p.total)}</p>
+              <p className="font-bold text-fucsia-texto">{pesos(p.total)}</p>
               {(p.porMayor || p.porcentajeDescuento > 0) && (
-                <p className="text-[10px] text-lila">
+                <p className="text-xs text-lila-texto">
                   {p.porMayor && "por mayor"}
                   {p.porMayor && p.porcentajeDescuento > 0 && " + "}
                   {p.porcentajeDescuento > 0 && `${p.porcentajeDescuento}%`}
@@ -98,14 +98,20 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
 
           {abierto === p.id && (
             <div className="mt-3 space-y-3 border-t border-rosa-nube pt-3">
+              {p.notasCliente && (
+                <p className="rounded-suave bg-alerta-fondo px-3 py-2 text-sm text-carbon">
+                  <strong>Nota de la clienta:</strong> {p.notasCliente}
+                </p>
+              )}
+
               <ul className="space-y-1">
                 {p.lineas.map((l) => (
                   <li key={l.id} className="flex justify-between gap-2 text-sm">
                     <span className="min-w-0">
-                      <span className="text-[11px] font-bold text-lila">{l.referencia}</span>{" "}
+                      <span className="text-xs font-bold text-lila-texto">{l.referencia}</span>{" "}
                       {l.nombre}
                       {l.tono && (
-                        <strong className="text-fucsia"> · {l.tono}</strong>
+                        <strong className="text-fucsia-texto"> · {l.tono}</strong>
                       )}{" "}
                       <span className="text-carbon-suave">x{l.cantidad}</span>
                     </span>
@@ -135,7 +141,7 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                         router.refresh();
                       })
                     }
-                    className="min-h-[40px] cursor-pointer rounded-pastilla border
+                    className="min-h-[44px] cursor-pointer rounded-pastilla border
                                border-lila-suave px-4 text-xs font-semibold text-carbon-suave
                                transition duration-200 hover:border-fucsia hover:text-fucsia
                                disabled:opacity-40"
@@ -148,7 +154,7 @@ export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
                   href={enlaceCliente(p.clienteWhatsapp)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex min-h-[40px] cursor-pointer items-center gap-1
+                  className="inline-flex min-h-[44px] cursor-pointer items-center gap-1
                              rounded-pastilla bg-fucsia px-4 text-xs font-semibold text-petalo"
                 >
                   <IconoWhatsApp className="h-4 w-4" />

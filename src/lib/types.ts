@@ -27,6 +27,17 @@ export type Producto = {
   stock: number;
   activo: boolean;
   escalones: Escalon[];
+  /**
+   * Cuántos tonos tiene el producto.
+   *
+   * La grilla del catálogo ya NO trae los tonos: con 591 productos y
+   * paletas de 30 colores eran ~12.000 filas extra por pantalla, y la
+   * clienta veía un muro de círculos de productos que ni le interesaban.
+   * Aquí solo viaja el número (para saber si hay que ofrecer la hoja de
+   * tonos) y los tonos se piden al abrirla.
+   */
+  numTonos: number;
+  /** Vacío en la grilla; completo en el detalle y en la hoja de tonos. */
   tonos: Tono[];
 };
 
@@ -60,6 +71,8 @@ export type Pedido = {
   clienteNombre: string;
   clienteWhatsapp: string;
   clienteCiudad: string;
+  /** Indicaciones que la clienta escribió al confirmar (opcional). */
+  notasCliente: string | null;
   subtotal: number;
   descuento: number;
   porcentajeDescuento: number;
@@ -70,17 +83,4 @@ export type Pedido = {
   codigoUsado: string | null;
   creadoEn: string;
   lineas: LineaPedido[];
-};
-
-export type EstadoCodigo = "disponible" | "usado" | "anulado";
-
-export type Codigo = {
-  id: string;
-  code: string;
-  estado: EstadoCodigo;
-  venceEn: string;
-  creadoEn: string;
-  usadoEn: string | null;
-  numeroPedido: string | null;
-  nota: string | null;
 };

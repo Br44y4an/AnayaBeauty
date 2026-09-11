@@ -55,3 +55,38 @@ describe("filtroBusqueda", () => {
     expect(filtroBusqueda("x", ["nombre"])).toBe('nombre.ilike."%x%"');
   });
 });
+
+/**
+ * Segunda trampa de la misma cadena: `%` y `_` son los comodines de
+ * `ilike`, no texto corriente. La clienta escribe "50%" porque es el
+ * nombre del producto y "A_1" porque así es la referencia; sin escapar,
+ * la primera búsqueda traía todo lo que empezara por "50" y la segunda
+ * también "A11" y "AB1".
+ */
+describe("filtroBusqueda · comodines de LIKE", () => {
+  it("escapa el %, que en ilike significa «cualquier cosa»", () => {
+    expect(filtroBusqueda("50%", ["nombre"])).toBe('nombre.ilike."%50\\%%"');
+  });
+
+  it("escapa el guion bajo, comodín de un solo carácter", () => {
+    expect(filtroBusqueda("A_1", ["referencia"])).toBe('referencia.ilike."%A\\_1%"');
+  });
+
+  it("escapa la barra invertida antes que los demás caracteres", () => {
+    // Si se escapara al final, duplicaría las barras que añaden los
+    // otros escapes y volvería a romper el filtro.
+    expect(filtroBusqueda("a\\b", ["nombre"])).toBe('nombre.ilike."%a\\\\b%"');
+  });
+
+  it("escapa un comodín y una comilla juntos sin pisarse", () => {
+    expect(filtroBusqueda('5% "neto"', ["nombre"])).toBe(
+      'nombre.ilike."%5\\% \\"neto\\"%"'
+    );
+  });
+
+  it("sigue protegiendo la coma, que separa condiciones en or()", () => {
+    expect(filtroBusqueda("base, matte", ["nombre"])).toBe(
+      'nombre.ilike."%base, matte%"'
+    );
+  });
+});

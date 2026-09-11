@@ -98,7 +98,7 @@ function FilaCategoria({
       </div>
 
       <form action={eliminarCategoria.bind(null, categoria.id)}>
-        <button className="min-h-[40px] cursor-pointer px-2 text-xs text-carbon-suave
+        <button className="min-h-[44px] cursor-pointer px-2 text-xs text-carbon-suave
                            underline transition hover:text-fucsia">
           Ocultar
         </button>

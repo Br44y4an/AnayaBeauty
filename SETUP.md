@@ -4,10 +4,40 @@ Guía paso a paso. No necesitas saber programar: es copiar, pegar y hacer clic.
 
 ---
 
+## ⚠️ ANTES DE NADA: la actualización v4
+
+Esta versión **elimina el código de 4 dígitos**. La clienta ya no tiene que
+pedirte nada por WhatsApp para confirmar: elige, pone sus datos y listo. Tú
+sigues cobrando igual, a mano, después.
+
+Para que funcione hay que ejecutar un archivo en Supabase, **y hay que hacerlo
+ANTES de publicar la web nueva**. Si lo haces al revés, el catálogo se queda
+sin cargar hasta que corras el archivo.
+
+1. Entra a [supabase.com](https://supabase.com) → tu proyecto → **SQL Editor**.
+2. Abre el archivo `supabase/migracion-v4.sql` de este proyecto, copia **todo**
+   su contenido y pégalo ahí.
+3. Dale a **Run**. Tarda unos segundos.
+4. (Opcional pero recomendado) Pega también `supabase/tests-v4.sql` y dale Run:
+   son 12 comprobaciones que no modifican nada y te dicen si todo quedó bien.
+
+Para confirmar que quedó, desde tu computador:
+
+```bash
+node --env-file=.env.local scripts/verificar-migracion.mjs
+```
+
+Debe terminar en **"✅ La base está lista para esta versión del código."**
+Si sale en rojo, dice exactamente qué falta.
+
+**Después** de eso ya puedes publicar la web (paso 3).
+
+---
+
 ## Lo que ya está hecho
 
 - ✅ Base de datos creada y verificada en Supabase
-- ✅ Catálogo, carrito, códigos, pedidos y panel construidos
+- ✅ Catálogo, carrito, pedidos y panel construidos
 - ✅ Productos de ejemplo cargados para que veas cómo funciona
 
 ## Lo que falta
@@ -151,19 +181,26 @@ quita, aunque el total quede por debajo del umbral.
 
 ## Cómo se usa en cada transmisión
 
-**Antes de empezar:** abre dos pestañas, `/admin` (pedidos) y `/admin/codigos`.
+**Antes de empezar:** abre `/admin` (pedidos). Ya no hace falta la pestaña de
+códigos: desapareció.
 
 **Durante el live:**
 
 1. Muestras el QR (lo descargas desde `/admin/qr`)
-2. Una clienta transfiere los 10.000 y te manda el comprobante
-3. En `/admin/codigos` das **"Generar código nuevo"**
-4. Aprietas **"Copiar mensaje"** y lo pegas en su chat de WhatsApp
-5. Ella toca el link, el código se aplica solo, elige sus productos y confirma
-6. El pedido aparece en `/admin` sin que tengas que refrescar, y te llega el correo
+2. La clienta entra, elige sus productos y **confirma ella sola**, sin
+   esperarte y sin pedirte ningún código
+3. El pedido aparece en `/admin` sin que tengas que refrescar, y te llega el
+   correo con todo el detalle (incluida la nota que ella haya escrito)
+4. Ella ve en pantalla tus datos de pago, con un botón para copiar el número,
+   y te manda el comprobante por WhatsApp con un toque
 
 **Al terminar:** marcas como "pagado" los que ya te transfirieron y como
 "enviado" los que despachaste.
+
+**¿Y si alguien pide sin pagar?** Igual que antes: el pedido queda en "nuevo"
+y tú decides. Si no paga, lo cancelas desde `/admin` y **el stock vuelve solo
+al inventario**. La diferencia es que ahora no pierdes las ventas de las que sí
+iban a pagar y se cansaron de esperar el código.
 
 ---
 
@@ -181,10 +218,15 @@ gratuito **solo envía a la dirección con la que te registraste**, así que la
 cuenta tiene que ser de `anayabeauty54@gmail.com`. Si pasaste de 100 correos
 hoy, espera a mañana: los pedidos siguen llegando al panel igual.
 
-**Una clienta dice que su código no funciona**
-Búscalo en `/admin/codigos`. Si dice "Usado", ya lo gastó. Si dice "Vencido",
-pasaron más de 24 horas: genérale uno nuevo. Puedes cambiar esa duración en
-**Ajustes**.
+**Una clienta dice que confirmó dos veces sin querer**
+No pasa nada: el sistema reconoce el reenvío y le devuelve el pedido que ya
+había creado. No se duplica ni se descuenta el stock dos veces. Si aun así ves
+dos pedidos iguales, cancela uno desde `/admin` y el inventario vuelve solo.
+
+**Le sale "Ya recibimos varios pedidos desde este dispositivo"**
+Es el freno contra el abuso: más de 6 pedidos en 10 minutos desde el mismo
+dispositivo. Si es una clienta real (una tienda comprando para varias
+personas), dile que espere unos minutos o tómale el pedido tú por WhatsApp.
 
 **El stock quedó mal**
 Busca el pedido en `/admin` y márcalo como "cancelado": el sistema devuelve

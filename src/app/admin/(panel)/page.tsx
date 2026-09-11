@@ -84,7 +84,7 @@ export default async function PaginaPedidos({
               key={f}
               href={href}
               aria-current={activo ? "page" : undefined}
-              className={`inline-flex min-h-[40px] cursor-pointer items-center whitespace-nowrap
+              className={`inline-flex min-h-[44px] cursor-pointer items-center whitespace-nowrap
                 rounded-pastilla px-4 text-sm font-semibold capitalize transition duration-200
                 ${activo ? "bg-fucsia text-petalo" : "bg-petalo text-carbon-suave hover:text-fucsia"}`}
             >

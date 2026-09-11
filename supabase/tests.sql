@@ -1,5 +1,13 @@
 -- =====================================================================
 -- Anaya Beauty — Verificación de la lógica de negocio
+--
+-- ⚠️ OBSOLETO DESDE LA v4. Este archivo prueba el flujo con código de
+--    acceso de 4 dígitos, que ya no existe: `crear_pedido` cambió de
+--    firma y estas comprobaciones fallarán.
+--
+--    Usa `tests-v4.sql` en su lugar. Se conserva este archivo solo como
+--    referencia de lo que se comprobaba antes.
+--
 -- Ejecutar CUARTO. No modifica datos: termina con rollback.
 -- =====================================================================
 begin;

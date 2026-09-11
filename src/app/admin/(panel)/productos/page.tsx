@@ -105,7 +105,7 @@ export default async function PaginaProductos({
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-bold text-lila">{p.referencia}</p>
+                <p className="text-xs font-bold text-lila">{p.referencia}</p>
                 <p className="truncate text-sm font-semibold text-carbon">{p.nombre}</p>
                 <p className="text-xs text-carbon-suave">
                   {p.categoriaNombre ?? "Sin categoría"}

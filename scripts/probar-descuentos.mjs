@@ -24,7 +24,7 @@ const ok = (c, m, d = "") => {
 };
 
 const pesos = (v) => `$${new Intl.NumberFormat("es-CO").format(v)}`;
-const creados = { productos: [], codigos: [], pedidos: [] };
+const creados = { productos: [], pedidos: [] };
 
 async function crearProducto(referencia, nombre, escalones, stock, tonos = []) {
   const { data: p } = await db
@@ -54,20 +54,17 @@ async function crearProducto(referencia, nombre, escalones, stock, tonos = []) {
 }
 
 async function pedir(items) {
-  const code = String(Math.floor(1000 + Math.random() * 8999));
-  await db.from("access_codes").insert({
-    code,
-    vence_en: new Date(Date.now() + 3600e3).toISOString(),
-  });
-  creados.codigos.push(code);
-
+  // Firma v4: ya no hay código de acceso. Tampoco se manda ip_hash,
+  // porque el límite por dispositivo cuenta pedidos reales y esta prueba
+  // hace nueve seguidos: se limitaría a sí misma.
   const { data, error } = await db.rpc("crear_pedido", {
-    p_codigo: code,
     p_nombre: "Prueba Descuentos",
     p_whatsapp: "3009998877",
     p_ciudad: "Medellín",
+    p_notas: null,
     p_items: items,
-    p_ip_hash: "desc-" + Math.random(),
+    p_ip_hash: null,
+    p_clave: null,
   });
 
   if (error) throw new Error(error.message);
@@ -223,7 +220,6 @@ console.log("\n=== 9. El precio sigue sin poder manipularse desde el navegador =
 for (const id of creados.pedidos) await db.rpc("cancelar_pedido", { p_order_id: id });
 await db.from("order_items").delete().in("order_id", creados.pedidos);
 await db.from("orders").delete().in("id", creados.pedidos);
-await db.from("access_codes").delete().in("code", creados.codigos);
 await db.from("price_tiers").delete().in("product_id", creados.productos);
 await db.from("product_shades").delete().in("product_id", creados.productos);
 await db.from("products").delete().in("id", creados.productos);

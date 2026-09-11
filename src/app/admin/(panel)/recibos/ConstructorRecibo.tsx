@@ -240,7 +240,7 @@ export function ConstructorRecibo({
       <div className="flex gap-2">
         <button
           onClick={() => setModo("pedido")}
-          className={`min-h-[40px] flex-1 cursor-pointer rounded-pastilla text-sm font-semibold
+          className={`min-h-[44px] flex-1 cursor-pointer rounded-pastilla text-sm font-semibold
             transition duration-200 ${
               modo === "pedido" ? "bg-fucsia text-petalo" : "bg-petalo text-carbon-suave"
             }`}
@@ -249,7 +249,7 @@ export function ConstructorRecibo({
         </button>
         <button
           onClick={() => setModo("manual")}
-          className={`min-h-[40px] flex-1 cursor-pointer rounded-pastilla text-sm font-semibold
+          className={`min-h-[44px] flex-1 cursor-pointer rounded-pastilla text-sm font-semibold
             transition duration-200 ${
               modo === "manual" ? "bg-fucsia text-petalo" : "bg-petalo text-carbon-suave"
             }`}
@@ -301,7 +301,7 @@ export function ConstructorRecibo({
                         {l.cantidad}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="text-carbon-suave text-[10px]">P.U. $</span>
+                        <span className="text-carbon-suave text-xs">P.U. $</span>
                         <input
                           type="number"
                           className="w-20 rounded border border-rosa-nube px-1 py-0.5 text-right font-semibold bg-white"
@@ -444,7 +444,7 @@ export function ConstructorRecibo({
                     <select
                       value={tonoElegidoId}
                       onChange={(e) => setTonoElegidoId(e.target.value)}
-                      className="min-h-[40px] rounded-suave border-2 border-lila-suave bg-petalo px-3"
+                      className="min-h-[44px] rounded-suave border-2 border-lila-suave bg-petalo px-3"
                     >
                       <option value="">Elige…</option>
                       {productoElegido.tonos.map((t) => (
@@ -463,7 +463,7 @@ export function ConstructorRecibo({
                     min={1}
                     value={cantidadNueva}
                     onChange={(e) => setCantidadNueva(Math.max(1, Number(e.target.value)))}
-                    className="min-h-[40px] w-24 rounded-suave border-2 border-lila-suave bg-petalo px-3"
+                    className="min-h-[44px] w-24 rounded-suave border-2 border-lila-suave bg-petalo px-3"
                   />
                 </label>
 
@@ -500,7 +500,7 @@ export function ConstructorRecibo({
                       x{d.linea.cantidad}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-carbon-suave text-[10px]">P.U. $</span>
+                      <span className="text-carbon-suave text-xs">P.U. $</span>
                       <input
                         type="number"
                         className="w-20 rounded border border-rosa-nube px-1 py-0.5 text-right font-semibold bg-white"
