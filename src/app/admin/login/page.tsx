@@ -24,7 +24,7 @@ export default function PaginaLogin() {
           width={120}
           height={120}
           className="rounded-full"
-          priority
+          preload
         />
       </div>
 

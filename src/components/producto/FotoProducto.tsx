@@ -40,7 +40,7 @@ export function FotoProducto({ src, alt }: { src: string | null; alt: string }) 
           fill
           sizes="(max-width: 768px) 100vw, 600px"
           className="object-cover"
-          priority
+          preload
         />
         <span
           aria-hidden="true"

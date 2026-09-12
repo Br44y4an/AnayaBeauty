@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { crearClienteServidor } from "@/lib/supabase/server";
 import type { Producto, Categoria, Tono } from "@/lib/types";
 import type { ReglaDescuento } from "@/lib/discounts";
@@ -193,7 +194,15 @@ export async function obtenerProductos(opciones?: {
   };
 }
 
-export async function obtenerProductoPorReferencia(
+/**
+ * `cache()`: la página de producto pide este mismo producto dos veces
+ * en cada visita —una vez en `generateMetadata`, otra al renderizar—
+ * y sin memoizar eso eran dos viajes a Supabase por carga, con la
+ * clienta esperando el segundo de puro trámite. `cache()` hace que la
+ * segunda llamada con la misma referencia, dentro del mismo request,
+ * reuse el resultado de la primera en vez de repetir la consulta.
+ */
+export const obtenerProductoPorReferencia = cache(async function obtenerProductoPorReferencia(
   referencia: string
 ): Promise<Producto | null> {
   const supabase = await crearClienteServidor();
@@ -206,7 +215,7 @@ export async function obtenerProductoPorReferencia(
 
   if (error) throw new Error(`No se pudo cargar el producto: ${error.message}`);
   return data ? mapearProducto(data as unknown as FilaProducto) : null;
-}
+});
 
 /**
  * Tonos de un solo producto, para la hoja de selección.

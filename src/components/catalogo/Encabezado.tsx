@@ -17,7 +17,7 @@ export function Encabezado() {
           alt="Anaya Beauty — Encuentra tus mejores productos y excelentes valores. WhatsApp +57 322 881 3646"
           width={1600}
           height={670}
-          priority
+          preload
           sizes="(max-width: 768px) 100vw, 1152px"
           className="max-h-[38vh] w-full object-cover md:max-h-none"
         />
