@@ -1,13 +1,8 @@
 import { jsPDF } from "jspdf";
 import { pesos } from "@/lib/format";
+import { PALETA } from "@/lib/marca";
 
-/**
- * Recibo bonito en PDF para el panel de admin.
- *
- * Se genera 100% en el navegador (jsPDF): no hay servidor ni impresora
- * headless de por medio, así que sigue funcionando dentro de la capa
- * gratuita del proyecto.
- */
+/** Recibo en PDF del panel. Se genera en el navegador (jsPDF): sin servidor de por medio. */
 
 export type LineaRecibo = {
   referencia: string;
@@ -35,18 +30,25 @@ export type DatosRecibo = {
   pagoTitular?: string | null;
 };
 
-// Los mismos colores de globals.css, en RGB (jsPDF no entiende hex con setFillColor de un tirón en todas las versiones de forma fiable).
-const FUCSIA: [number, number, number] = [229, 48, 138];
-const LILA: [number, number, number] = [169, 127, 208];
-const LILA_SUAVE: [number, number, number] = [221, 201, 238];
-const ROSA_NUBE: [number, number, number] = [253, 242, 247];
-const CARBON: [number, number, number] = [61, 43, 54];
-const CARBON_SUAVE: [number, number, number] = [122, 100, 112];
-const BLANCO: [number, number, number] = [255, 255, 255];
+type Rgb = [number, number, number];
+
+/** jsPDF recibe los colores como tres números; la paleta es la de la web (lib/marca.ts). */
+function rgb(hex: string): Rgb {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+const TINTA = rgb(PALETA.tinta);
+const TINTA_SUAVE = rgb(PALETA.tintaSuave);
+const LINEA = rgb(PALETA.linea);
+const SUPERFICIE = rgb(PALETA.superficie);
+
+// public/marca/anaya-beauty.png: 349×160.
+const LOGO = { ruta: "/marca/anaya-beauty.png", alto: 44, ancho: (44 * 349) / 160 };
 
 async function cargarLogoBase64(): Promise<string | null> {
   try {
-    const respuesta = await fetch("/logo.jpg");
+    const respuesta = await fetch(LOGO.ruta);
     if (!respuesta.ok) return null;
     const blob = await respuesta.blob();
     return await new Promise((resolver) => {
@@ -84,40 +86,38 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
   const logo = await cargarLogoBase64();
 
   // ---------- Encabezado ----------
-  doc.setFillColor(...ROSA_NUBE);
+  doc.setFillColor(...SUPERFICIE);
   doc.rect(0, 0, ancho, ALTO_ENCABEZADO, "F");
 
-  const xTitulo = MARGEN + (logo ? 74 : 0);
+  let conLogo = false;
   if (logo) {
     try {
-      doc.addImage(logo, "JPEG", MARGEN, 24, 60, 60, undefined, "FAST");
+      doc.addImage(logo, "PNG", MARGEN, 30, LOGO.ancho, LOGO.alto, undefined, "FAST");
+      conLogo = true;
     } catch {
-      // Si el logo no carga (fetch bloqueado, red, etc.) el recibo se genera igual.
+      // Sin logo (red, bloqueo) el recibo sale igual, con el nombre en texto.
     }
   }
+  if (!conLogo) {
+    doc.setTextColor(...TINTA);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("Anaya Beauty", MARGEN, 58);
+  }
 
-  doc.setTextColor(...FUCSIA);
-  doc.setFont("times", "bolditalic");
-  doc.setFontSize(26);
-  doc.text("Anaya Beauty", xTitulo, 56);
-
-  doc.setTextColor(...LILA);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-  doc.text("Belleza que te define", xTitulo, 74);
-
-  doc.setTextColor(...CARBON);
+  doc.setTextColor(...TINTA);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
   doc.text(`Recibo ${datos.numero}`, ancho - MARGEN, 44, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.setTextColor(...CARBON_SUAVE);
+  doc.setTextColor(...TINTA_SUAVE);
   doc.text(
     datos.fecha.toLocaleDateString("es-CO", {
       day: "2-digit",
       month: "long",
       year: "numeric",
+      timeZone: "America/Bogota",
     }),
     ancho - MARGEN,
     60,
@@ -127,9 +127,9 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
   let y = ALTO_ENCABEZADO + 30;
 
   // ---------- Datos del cliente ----------
-  doc.setFillColor(...ROSA_NUBE);
+  doc.setFillColor(...SUPERFICIE);
   doc.roundedRect(MARGEN, y, ancho - MARGEN * 2, 56, 8, 8, "F");
-  doc.setTextColor(...CARBON);
+  doc.setTextColor(...TINTA);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.text(datos.clienteNombre || "Cliente", MARGEN + 16, y + 22);
@@ -140,7 +140,7 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
   if (detalleCliente) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.setTextColor(...CARBON_SUAVE);
+    doc.setTextColor(...TINTA_SUAVE);
     doc.text(detalleCliente, MARGEN + 16, y + 40);
   }
 
@@ -155,13 +155,13 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
   function encabezadoTabla(yTabla: number): number {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.setTextColor(...CARBON_SUAVE);
+    doc.setTextColor(...TINTA_SUAVE);
     doc.text("PRODUCTO", xNombre, yTabla);
     doc.text("CANT.", xCantidad, yTabla, { align: "right" });
     doc.text("P. UNIT.", xPrecio, yTabla, { align: "right" });
     doc.text("SUBTOTAL", xSubtotal, yTabla, { align: "right" });
     const yLinea = yTabla + 6;
-    doc.setDrawColor(...LILA_SUAVE);
+    doc.setDrawColor(...LINEA);
     doc.line(MARGEN, yLinea, ancho - MARGEN, yLinea);
     return yLinea + 18;
   }
@@ -175,36 +175,34 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.setTextColor(...LILA);
-    doc.text(linea.referencia, xNombre, y);
+    doc.setTextColor(...TINTA_SUAVE);
+    doc.text(`Ref. ${linea.referencia}`, xNombre, y);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.setTextColor(...CARBON);
+    doc.setTextColor(...TINTA);
     doc.text(linea.nombre, xNombre, y + 13, { maxWidth: xCantidad - xNombre - 16 });
 
+    // La etiqueta (tono, color, diseño) no viaja con la línea: va solo el nombre de la variante.
     if (linea.tono) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.setTextColor(...FUCSIA);
-      doc.text(`Tono: ${linea.tono}`, xNombre, y + 26);
+      doc.text(linea.tono, xNombre, y + 26);
     }
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.setTextColor(...CARBON);
-    doc.text(`x${linea.cantidad}`, xCantidad, y, { align: "right" });
+    doc.text(String(linea.cantidad), xCantidad, y, { align: "right" });
     doc.text(pesos(linea.precioUnitario), xPrecio, y, { align: "right" });
 
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(...FUCSIA);
     doc.text(pesos(linea.subtotal), xSubtotal, y, { align: "right" });
 
     y += linea.tono ? 36 : 30;
   }
 
   y += 6;
-  doc.setDrawColor(...LILA_SUAVE);
+  doc.setDrawColor(...LINEA);
   doc.line(MARGEN, y, ancho - MARGEN, y);
   y += 22;
 
@@ -214,7 +212,7 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
   function filaTotal(etiqueta: string, valor: string, destacado = false) {
     doc.setFont("helvetica", destacado ? "bold" : "normal");
     doc.setFontSize(destacado ? 14 : 10);
-    doc.setTextColor(...(destacado ? FUCSIA : CARBON_SUAVE));
+    doc.setTextColor(...(destacado ? TINTA : TINTA_SUAVE));
     doc.text(etiqueta, xPrecio, y, { align: "right" });
     doc.text(valor, xSubtotal, y, { align: "right" });
     y += destacado ? 22 : 16;
@@ -224,21 +222,21 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
     filaTotal("Subtotal", pesos(datos.subtotal));
     if (datos.porMayor) filaTotal("Precio por mayor", "aplicado");
     if (datos.descuento > 0) {
-      const etiqueta = datos.porcentaje > 0 ? `Descuento ${datos.porcentaje}%` : "Descuento";
+      const etiqueta = datos.porcentaje > 0 ? `Descuento ${datos.porcentaje} %` : "Descuento";
       filaTotal(etiqueta, `-${pesos(datos.descuento)}`);
     }
   }
-  filaTotal("TOTAL", pesos(datos.total), true);
+  filaTotal("Total", pesos(datos.total), true);
 
   // ---------- Datos de pago ----------
   if (datos.pagoNumero) {
     y += 10;
     y = asegurarEspacio(doc, y, 70).y;
-    doc.setFillColor(...LILA_SUAVE);
+    doc.setFillColor(...SUPERFICIE);
     doc.roundedRect(MARGEN, y, ancho - MARGEN * 2, 56, 8, 8, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setTextColor(...CARBON);
+    doc.setTextColor(...TINTA);
     doc.text("Para completar tu pago", MARGEN + 16, y + 20);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(12);
@@ -249,35 +247,28 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
     );
     if (datos.pagoTitular) {
       doc.setFontSize(9);
-      doc.setTextColor(...CARBON_SUAVE);
+      doc.setTextColor(...TINTA_SUAVE);
       doc.text(`a nombre de ${datos.pagoTitular}`, MARGEN + 16, y + 50);
     }
     y += 70;
   }
 
-  // ---------- Mensaje de agradecimiento ----------
-  // Los tipos base de jsPDF (Helvetica/Times) solo soportan WinAnsi: los
-  // emoji (✨) y símbolos fuera de Latin-1 (♡) salen como glifos rotos, así
-  // que aquí se usa texto plano en vez de los mismos íconos que en la web.
-  const mensajeGracias = "¡Gracias por tu compra, princesa!";
-  const mensajeGraciasSub = doc.splitTextToSize(
-    "Tu confianza significa el mundo para nosotras. Cuida mucho tu pedido.",
-    ancho - MARGEN * 2 - 32
-  );
-  const altoCajaGracias = 34 + mensajeGraciasSub.length * 13;
-
+  // ---------- Agradecimiento ----------
+  // Helvetica de jsPDF solo trae WinAnsi: nada de emoji ni símbolos fuera de Latin-1.
   y += 16;
-  y = asegurarEspacio(doc, y, altoCajaGracias + 10).y;
-  doc.setFillColor(...ROSA_NUBE);
-  doc.roundedRect(MARGEN, y, ancho - MARGEN * 2, altoCajaGracias, 10, 10, "F");
-  doc.setFont("times", "bolditalic");
-  doc.setFontSize(13);
-  doc.setTextColor(...FUCSIA);
-  doc.text(mensajeGracias, ancho / 2, y + 22, { align: "center" });
+  y = asegurarEspacio(doc, y, 50).y;
+  doc.setDrawColor(...LINEA);
+  doc.line(MARGEN, y, ancho - MARGEN, y);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...TINTA);
+  doc.text("Gracias por comprar en Anaya Beauty.", ancho / 2, y + 22, { align: "center" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
-  doc.setTextColor(...CARBON_SUAVE);
-  doc.text(mensajeGraciasSub, ancho / 2, y + 38, { align: "center" });
+  doc.setTextColor(...TINTA_SUAVE);
+  doc.text("Si tienes alguna pregunta sobre tu pedido, escríbenos por WhatsApp.", ancho / 2, y + 38, {
+    align: "center",
+  });
 
   // ---------- Pie de página en todas las hojas ----------
   const totalPaginas = doc.getNumberOfPages();
@@ -286,7 +277,7 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
     const altoPagina = doc.internal.pageSize.getHeight();
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.setTextColor(...CARBON_SUAVE);
+    doc.setTextColor(...TINTA_SUAVE);
     doc.text(
       "Anaya Beauty · Belleza que te define",
       ancho / 2,

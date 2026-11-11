@@ -1,49 +1,35 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { clienteAdmin } from "@/lib/supabase/admin";
-import { crearClienteServidor } from "@/lib/supabase/server";
+import { exigirAdmin } from "@/lib/admin/sesion";
+import { estadoDeParametro, mensajeErrorEstado } from "@/lib/admin/pedidos";
+import type { Resultado } from "@/lib/admin/resultado";
+import { invalidarCatalogo } from "@/lib/data/invalidar";
+import { esUuid } from "@/lib/ids";
 import type { EstadoPedido } from "@/lib/types";
 
 /**
- * Las acciones del panel usan la clave de servicio, que se salta las
- * reglas de seguridad. Por eso cada una comprueba primero que quien
- * llama tenga sesión iniciada.
+ * Solo pasa por `cambiar_estado_pedido`: valida la transición y, al cancelar, devuelve el stock una vez.
+ * Repetir el estado actual (doble toque) no es error.
  */
-async function exigirSesion() {
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function cambiarEstadoPedido(pedidoId: string, estado: EstadoPedido): Promise<Resultado> {
+  await exigirAdmin();
+  const destino = estadoDeParametro(estado);
+  if (!esUuid(pedidoId) || !destino) return { ok: false, error: "Este pedido ya no existe." };
 
-  if (!user) throw new Error("No autorizado");
-}
+  const { error } = await clienteAdmin().rpc("cambiar_estado_pedido", {
+    p_order_id: pedidoId,
+    p_estado: destino,
+  });
 
-export async function cambiarEstadoPedido(pedidoId: string, estado: EstadoPedido) {
-  await exigirSesion();
-  const supabase = clienteAdmin();
-
-  if (estado === "cancelado") {
-    // Pasa por la función para que el stock vuelva al inventario.
-    const { error } = await supabase.rpc("cancelar_pedido", { p_order_id: pedidoId });
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase.from("orders").update({ estado }).eq("id", pedidoId);
-    if (error) throw new Error(error.message);
+  if (error) {
+    console.error("[panel] no se pudo cambiar el estado del pedido:", error);
+    refresh();
+    return { ok: false, error: mensajeErrorEstado(error) };
   }
 
-  revalidatePath("/admin");
-}
-
-export async function guardarNotaPedido(pedidoId: string, nota: string) {
-  await exigirSesion();
-  const supabase = clienteAdmin();
-
-  const { error } = await supabase
-    .from("orders")
-    .update({ notas_admin: nota.trim() || null })
-    .eq("id", pedidoId);
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/admin");
+  if (destino === "cancelado") invalidarCatalogo();
+  refresh();
+  return { ok: true };
 }

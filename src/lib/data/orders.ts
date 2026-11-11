@@ -1,13 +1,19 @@
 import "server-only";
+import { cache } from "react";
 import { clienteAdmin } from "@/lib/supabase/admin";
-import type { Pedido, EstadoPedido } from "@/lib/types";
+import { exigirAdmin } from "@/lib/admin/sesion";
+import { inicioDelDiaBogota, kpisDelDia } from "@/lib/admin/pedidos";
 import { filtroBusqueda } from "@/lib/data/busqueda";
+import { falla } from "@/lib/data/errores";
+import { esUuid } from "@/lib/ids";
+import type { EstadoPedido, LineaPedido, Pedido } from "@/lib/types";
+
+// Lecturas del panel con la clave de servicio: cada una exige primero una administradora.
 
 const CAMPOS_PEDIDO = `
   id, numero_pedido, cliente_nombre, cliente_whatsapp, cliente_ciudad,
   subtotal, descuento, porcentaje_descuento, por_mayor,
   total, estado, notas_admin, notas_cliente, created_at,
-  access_codes!orders_code_id_fkey ( code ),
   order_items ( id, referencia_snapshot, nombre_snapshot, tono_snapshot, cantidad,
                 precio_unitario_aplicado, subtotal )
 `;
@@ -18,16 +24,15 @@ type FilaPedido = {
   cliente_nombre: string;
   cliente_whatsapp: string;
   cliente_ciudad: string;
-  subtotal: number;
-  descuento: number;
-  porcentaje_descuento: number;
-  por_mayor: boolean;
+  subtotal: number | null;
+  descuento: number | null;
+  porcentaje_descuento: number | null;
+  por_mayor: boolean | null;
   total: number;
   estado: EstadoPedido;
   notas_admin: string | null;
   notas_cliente: string | null;
   created_at: string;
-  access_codes: { code: string } | { code: string }[] | null;
   order_items:
     | {
         id: string;
@@ -41,78 +46,115 @@ type FilaPedido = {
     | null;
 };
 
+const orden = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+
+/** Juntas por producto y con los tonos como en la foto: así se empaca. */
+function enOrden(a: LineaPedido, b: LineaPedido): number {
+  return orden.compare(a.referencia, b.referencia) || orden.compare(a.tono ?? "", b.tono ?? "");
+}
+
 function mapearPedido(fila: FilaPedido): Pedido {
+  const descuento = fila.descuento ?? 0;
   return {
     id: fila.id,
     numeroPedido: fila.numero_pedido,
     clienteNombre: fila.cliente_nombre,
     clienteWhatsapp: fila.cliente_whatsapp,
     clienteCiudad: fila.cliente_ciudad,
-    notasCliente: fila.notas_cliente ?? null,
-    subtotal: fila.subtotal ?? fila.total,
-    descuento: fila.descuento ?? 0,
+    notasCliente: fila.notas_cliente?.trim() || null,
+    // Los pedidos anteriores a la columna guardaron subtotal 0.
+    subtotal: fila.subtotal || fila.total + descuento,
+    descuento,
     porcentajeDescuento: fila.porcentaje_descuento ?? 0,
     porMayor: fila.por_mayor ?? false,
     total: fila.total,
     estado: fila.estado,
     notasAdmin: fila.notas_admin,
     creadoEn: fila.created_at,
-    lineas: (fila.order_items ?? []).map((l) => ({
-      id: l.id,
-      referencia: l.referencia_snapshot,
-      nombre: l.nombre_snapshot,
-      tono: l.tono_snapshot ?? null,
-      cantidad: l.cantidad,
-      precioUnitarioAplicado: l.precio_unitario_aplicado,
-      subtotal: l.subtotal,
-    })),
+    lineas: (fila.order_items ?? [])
+      .map((l) => ({
+        id: l.id,
+        referencia: l.referencia_snapshot,
+        nombre: l.nombre_snapshot,
+        tono: l.tono_snapshot ?? null,
+        cantidad: l.cantidad,
+        precioUnitarioAplicado: l.precio_unitario_aplicado,
+        subtotal: l.subtotal,
+      }))
+      .sort(enOrden),
   };
 }
 
-export async function obtenerPedidoPorId(id: string): Promise<Pedido | null> {
-  // El identificador es impredecible: sirve como llave de acceso a la
-  // pantalla de éxito sin exponer los pedidos de otras clientas.
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    return null;
-  }
-
-  const supabase = clienteAdmin();
-  const { data, error } = await supabase
-    .from("orders")
-    .select(CAMPOS_PEDIDO)
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error || !data) return null;
-  return mapearPedido(data as unknown as FilaPedido);
-}
+/** La lista trae los más recientes; para uno anterior se busca. */
+export const LIMITE_PEDIDOS = 200;
 
 export async function listarPedidos(filtro?: {
   estado?: EstadoPedido;
   busqueda?: string;
 }): Promise<Pedido[]> {
-  const supabase = clienteAdmin();
+  await exigirAdmin();
 
-  let consulta = supabase
+  let consulta = clienteAdmin()
     .from("orders")
     .select(CAMPOS_PEDIDO)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(LIMITE_PEDIDOS);
 
   if (filtro?.estado) consulta = consulta.eq("estado", filtro.estado);
-
   if (filtro?.busqueda?.trim()) {
     consulta = consulta.or(
-      filtroBusqueda(filtro.busqueda, [
-        "cliente_nombre",
-        "numero_pedido",
-        "cliente_whatsapp",
-      ])
+      filtroBusqueda(filtro.busqueda, ["cliente_nombre", "numero_pedido", "cliente_whatsapp"])
     );
   }
 
-  const { data, error } = await consulta;
-  if (error) throw new Error(`No se pudieron cargar los pedidos: ${error.message}`);
-
-  return (data as unknown as FilaPedido[]).map(mapearPedido);
+  const { data, error } = await consulta.overrideTypes<FilaPedido[], { merge: false }>();
+  if (error) falla("panel", "No se pudieron cargar los pedidos", error);
+  return (data ?? []).map(mapearPedido);
 }
+
+/** Para `/admin/recibos?pedido=id` cuando el pedido no está entre los más recientes. */
+export async function obtenerPedidoAdmin(id: string): Promise<Pedido | null> {
+  await exigirAdmin();
+  if (!esUuid(id)) return null;
+
+  const { data, error } = await clienteAdmin()
+    .from("orders")
+    .select(CAMPOS_PEDIDO)
+    .eq("id", id)
+    .maybeSingle()
+    .overrideTypes<FilaPedido, { merge: false }>();
+
+  if (error) falla("panel", "No se pudo cargar el pedido", error);
+  return data ? mapearPedido(data) : null;
+}
+
+/** Cifras del día en hora de Bogotá, sin importar el filtro de la lista. */
+export async function obtenerResumenDelDia(): Promise<ReturnType<typeof kpisDelDia>> {
+  await exigirAdmin();
+  const ahora = new Date();
+
+  const { data, error } = await clienteAdmin()
+    .from("orders")
+    .select("created_at, total, estado")
+    .gte("created_at", inicioDelDiaBogota(ahora).toISOString())
+    .overrideTypes<{ created_at: string; total: number; estado: EstadoPedido }[], { merge: false }>();
+
+  if (error) falla("panel", "No se pudo calcular el resumen del día", error);
+  return kpisDelDia(
+    (data ?? []).map((f) => ({ creadoEn: f.created_at, total: f.total, estado: f.estado })),
+    ahora
+  );
+}
+
+/** Pedidos por atender: el contador de la navegación y del título de la pestaña. */
+export const contarPedidosNuevos = cache(async (): Promise<number> => {
+  await exigirAdmin();
+
+  const { count, error } = await clienteAdmin()
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("estado", "nuevo");
+
+  if (error) falla("panel", "No se pudieron contar los pedidos nuevos", error);
+  return count ?? 0;
+});

@@ -9,9 +9,12 @@ import { Boton } from "@/components/ui/Boton";
 import { IconoMas } from "@/components/ui/Iconos";
 import type { Pedido, Producto } from "@/lib/types";
 
-const CAMPO =
-  "min-h-[44px] w-full rounded-suave border-2 border-lila-suave bg-petalo px-4 " +
-  "outline-none transition duration-200 focus:border-fucsia";
+const CAMPO = "mt-2 block min-h-12 w-full rounded-md border border-borde bg-fondo px-3.5 text-base text-tinta";
+const ETIQUETA = "block text-[15px] font-semibold leading-5 text-tinta";
+const PRECIO =
+  "min-h-11 w-28 rounded-md border border-borde bg-fondo px-2 text-right text-base font-semibold tabular-nums text-tinta";
+const CASILLA = "flex min-h-11 cursor-pointer select-none items-center gap-2 text-sm text-tinta";
+const TARJETA = "rounded-md border border-linea p-4 sm:p-5";
 
 type LineaManual = {
   productoId: string;
@@ -30,6 +33,7 @@ function numeroSugerido(): string {
 
 export function ConstructorRecibo({
   pedidos,
+  pedidoInicial = "",
   productos,
   reglas,
   umbralPorMayor,
@@ -38,6 +42,8 @@ export function ConstructorRecibo({
   pagoTitular,
 }: {
   pedidos: Pedido[];
+  /** `?pedido=id` desde la tarjeta del pedido: llega ya elegido. */
+  pedidoInicial?: string;
   productos: Producto[];
   reglas: ReglaDescuento[];
   umbralPorMayor: number;
@@ -49,7 +55,7 @@ export function ConstructorRecibo({
   const [generando, setGenerando] = useState(false);
 
   // ---------- Modo: desde un pedido existente ----------
-  const [pedidoId, setPedidoId] = useState("");
+  const [pedidoId, setPedidoId] = useState(pedidoInicial);
   const pedido = pedidos.find((p) => p.id === pedidoId) ?? null;
   const [preciosPedidoOverride, setPreciosPedidoOverride] = useState<Record<string, number>>({});
   const [descuentoPedidoOverride, setDescuentoPedidoOverride] = useState<number | null>(null);
@@ -148,7 +154,7 @@ export function ConstructorRecibo({
 
   const totalesManual = calcularTotales(lineasCalculoManual, reglas, umbralPorMayor);
 
-  const lineasReciboManual: LineaRecibo[] = detallesManual.map((d) => {
+  const lineasReciboManual: (LineaRecibo & { key: string })[] = detallesManual.map((d) => {
     const key = `${d.producto.id}-${d.linea.tonoId ?? "sin"}`;
     const unitarioCalculado = unitarioDeLinea(
       { productoId: d.producto.id, escalones: d.producto.escalones, cantidad: d.linea.cantidad },
@@ -164,7 +170,7 @@ export function ConstructorRecibo({
       precioUnitario: unitario,
       subtotal: unitario * d.linea.cantidad,
       key,
-    } as LineaRecibo & { key: string };
+    };
   });
 
   const subtotalManualOverride = lineasReciboManual.reduce((acc, l) => acc + l.subtotal, 0);
@@ -237,33 +243,26 @@ export function ConstructorRecibo({
 
   return (
     <div className="max-w-2xl space-y-5">
-      <div className="flex gap-2">
-        <button
-          onClick={() => setModo("pedido")}
-          className={`min-h-[44px] flex-1 cursor-pointer rounded-pastilla text-sm font-semibold
-            transition duration-200 ${
-              modo === "pedido" ? "bg-fucsia text-petalo" : "bg-petalo text-carbon-suave"
+      <div role="group" aria-label="Tipo de recibo" className="grid grid-cols-2 gap-2">
+        {(["pedido", "manual"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            aria-pressed={modo === m}
+            onClick={() => setModo(m)}
+            className={`min-h-11 cursor-pointer rounded-md border text-[15px] font-semibold ${
+              modo === m ? "border-tinta bg-tinta text-fondo" : "border-borde bg-fondo text-tinta hover:border-tinta"
             }`}
-        >
-          Desde un pedido
-        </button>
-        <button
-          onClick={() => setModo("manual")}
-          className={`min-h-[44px] flex-1 cursor-pointer rounded-pastilla text-sm font-semibold
-            transition duration-200 ${
-              modo === "manual" ? "bg-fucsia text-petalo" : "bg-petalo text-carbon-suave"
-            }`}
-        >
-          Recibo manual
-        </button>
+          >
+            {m === "pedido" ? "Desde un pedido" : "Recibo manual"}
+          </button>
+        ))}
       </div>
 
       {modo === "pedido" ? (
-        <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-petalo">
+        <div className={`space-y-4 ${TARJETA}`}>
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-carbon">
-              Elige el pedido
-            </span>
+            <span className={ETIQUETA}>Elige el pedido</span>
             <select
               value={pedidoId}
               onChange={(e) => {
@@ -284,133 +283,131 @@ export function ConstructorRecibo({
           </label>
 
           {pedido && (
-            <div className="space-y-2 rounded-suave bg-rosa-nube p-4">
-              <p className="text-sm font-semibold text-carbon">{pedido.clienteNombre}</p>
-              <p className="text-xs text-carbon-suave">
-                {pedido.clienteCiudad} · {pedido.clienteWhatsapp}
-              </p>
-              <ul className="space-y-1 pt-1">
+            <div className="space-y-3 rounded-md bg-superficie p-4">
+              <div>
+                <p className="text-base font-semibold leading-6 text-tinta">{pedido.clienteNombre}</p>
+                <p className="text-sm leading-5 text-tinta-suave">
+                  {pedido.clienteCiudad} · {pedido.clienteWhatsapp}
+                </p>
+              </div>
+              <ul className="divide-y divide-linea">
                 {pedido.lineas.map((l) => {
                   const precio = preciosPedidoOverride[l.id] ?? l.precioUnitarioAplicado;
-                  const subtotal = precio * l.cantidad;
                   return (
-                    <li key={l.id} className="flex justify-between items-center text-xs text-carbon">
-                      <span>
+                    <li key={l.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm text-tinta">
+                      <span className="w-full min-w-0 sm:w-auto sm:flex-1">
                         {l.nombre}
-                        {l.tono && <strong className="text-fucsia"> · {l.tono}</strong>} x
-                        {l.cantidad}
+                        {l.tono && <span className="font-semibold"> · {l.tono}</span>}{" "}
+                        <span className="tabular-nums text-tinta-suave">× {l.cantidad}</span>
                       </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-carbon-suave text-xs">P.U. $</span>
+                      <span className="ml-auto flex items-center gap-2">
                         <input
                           type="number"
-                          className="w-20 rounded border border-rosa-nube px-1 py-0.5 text-right font-semibold bg-white"
+                          inputMode="numeric"
+                          min={0}
+                          aria-label={`Precio unitario de ${l.nombre}${l.tono ? `, ${l.tono}` : ""}`}
+                          className={PRECIO}
                           value={precio}
-                          onChange={(e) => setPreciosPedidoOverride({...preciosPedidoOverride, [l.id]: Number(e.target.value)})}
+                          onChange={(e) =>
+                            setPreciosPedidoOverride({ ...preciosPedidoOverride, [l.id]: Number(e.target.value) })
+                          }
                         />
-                        <span className="font-semibold ml-2 min-w-[60px] text-right">{pesos(subtotal)}</span>
-                      </div>
+                        <span className="min-w-20 text-right font-semibold tabular-nums">{pesos(precio * l.cantidad)}</span>
+                      </span>
                     </li>
                   );
                 })}
               </ul>
-              <div className="pt-2 text-right">
-                <div className="flex justify-end items-center gap-3 mb-2 mt-1">
-                  <label className="flex items-center gap-1 text-xs text-carbon-suave cursor-pointer select-none">
-                    <input 
-                      type="checkbox" 
-                      checked={mostrarDescuentoPedido} 
-                      onChange={(e) => setMostrarDescuentoPedido(e.target.checked)} 
-                    />
-                    Mostrar en recibo
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-lila font-semibold">Descuento $</span>
-                    <input
-                      type="number"
-                      className="w-24 rounded border border-rosa-nube px-2 py-1 text-right font-semibold bg-white text-sm"
-                      value={descuentoPedidoOverride ?? pedido.descuento}
-                      onChange={(e) => setDescuentoPedidoOverride(e.target.value === "" ? null : Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-                <p className="font-display text-lg text-fucsia">
+              <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 border-t border-linea pt-3">
+                <label className={CASILLA}>
+                  <input
+                    type="checkbox"
+                    className="size-5 accent-tinta"
+                    checked={mostrarDescuentoPedido}
+                    onChange={(e) => setMostrarDescuentoPedido(e.target.checked)}
+                  />
+                  Mostrar en el recibo
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-tinta">
+                  Descuento ($)
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    className={PRECIO}
+                    value={descuentoPedidoOverride ?? pedido.descuento}
+                    onChange={(e) => setDescuentoPedidoOverride(e.target.value === "" ? null : Number(e.target.value))}
+                  />
+                </label>
+              </div>
+              <p className="flex items-baseline justify-between text-tinta">
+                <span className="text-base font-semibold">Total</span>
+                <span className="text-xl font-bold tabular-nums">
                   {pesos(
                     pedido.lineas.reduce(
                       (acc, l) => acc + (preciosPedidoOverride[l.id] ?? l.precioUnitarioAplicado) * l.cantidad,
                       0
                     ) - (descuentoPedidoOverride ?? pedido.descuento)
                   )}
-                </p>
-              </div>
+                </span>
+              </p>
             </div>
           )}
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 rounded-tarjeta bg-petalo p-5 shadow-petalo sm:grid-cols-2">
+          <div className={`grid gap-4 sm:grid-cols-2 ${TARJETA}`}>
             <label className="block sm:col-span-2">
-              <span className="mb-1 block text-sm font-semibold text-carbon">
-                Número o referencia del recibo
-              </span>
-              <input
-                value={numero}
-                onChange={(e) => setNumero(e.target.value)}
-                className={CAMPO}
-              />
+              <span className={ETIQUETA}>Número del recibo</span>
+              <input value={numero} onChange={(e) => setNumero(e.target.value)} className={CAMPO} />
             </label>
-
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-carbon">
-                Cliente
-              </span>
+              <span className={ETIQUETA}>Cliente</span>
               <input
                 value={clienteNombre}
                 onChange={(e) => setClienteNombre(e.target.value)}
-                placeholder="Nombre completo"
+                autoComplete="off"
                 className={CAMPO}
               />
             </label>
-
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-carbon">
-                WhatsApp <span className="font-normal text-carbon-suave">(opcional)</span>
+              <span className={ETIQUETA}>
+                WhatsApp <span className="font-normal text-tinta-suave">(opcional)</span>
               </span>
               <input
                 value={clienteWhatsapp}
                 onChange={(e) => setClienteWhatsapp(e.target.value)}
+                inputMode="tel"
+                autoComplete="off"
                 className={CAMPO}
               />
             </label>
-
             <label className="block sm:col-span-2">
-              <span className="mb-1 block text-sm font-semibold text-carbon">
-                Ciudad <span className="font-normal text-carbon-suave">(opcional)</span>
+              <span className={ETIQUETA}>
+                Ciudad <span className="font-normal text-tinta-suave">(opcional)</span>
               </span>
-              <input
-                value={clienteCiudad}
-                onChange={(e) => setClienteCiudad(e.target.value)}
-                className={CAMPO}
-              />
+              <input value={clienteCiudad} onChange={(e) => setClienteCiudad(e.target.value)} className={CAMPO} />
             </label>
           </div>
 
-          {/* Agregar productos */}
-          <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-petalo">
-            <p className="text-sm font-semibold text-carbon">Agregar producto</p>
-
+          <div className={`space-y-3 ${TARJETA}`}>
             <div className="relative">
-              <input
-                value={busqueda}
-                onChange={(e) => {
-                  setBusqueda(e.target.value);
-                  setProductoElegido(null);
-                }}
-                placeholder="Busca por nombre o referencia…"
-                className={CAMPO}
-              />
+              <label className="block">
+                <span className={ETIQUETA}>Agregar producto</span>
+                <span className="mt-1 block text-[13px] leading-[18px] text-tinta-suave">Busca por nombre o referencia</span>
+                <input
+                  value={busqueda}
+                  onChange={(e) => {
+                    setBusqueda(e.target.value);
+                    setProductoElegido(null);
+                  }}
+                  type="search"
+                  autoComplete="off"
+                  className={CAMPO}
+                />
+              </label>
               {sugerencias.length > 0 && !productoElegido && (
-                <ul className="absolute z-10 mt-1 w-full space-y-0.5 rounded-suave bg-petalo p-1 shadow-flotante">
+                <ul className="absolute z-10 mt-1 w-full rounded-md bg-fondo p-1 shadow-flotante ring-1 ring-linea">
                   {sugerencias.map((p) => (
                     <li key={p.id}>
                       <button
@@ -419,14 +416,12 @@ export function ConstructorRecibo({
                           setProductoElegido(p);
                           setBusqueda(`${p.referencia} — ${p.nombre}`);
                         }}
-                        className="flex w-full cursor-pointer items-center justify-between
-                                   rounded-suave px-3 py-2 text-left text-sm hover:bg-rosa-nube"
+                        className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-3 text-left text-[15px] text-tinta hover:bg-superficie"
                       >
                         <span className="truncate">
-                          <span className="font-bold text-lila">{p.referencia}</span>{" "}
-                          {p.nombre}
+                          <span className="font-semibold text-tinta-suave">{p.referencia}</span> {p.nombre}
                         </span>
-                        <span className="shrink-0 text-carbon-suave">
+                        <span className="shrink-0 tabular-nums text-tinta-suave">
                           {pesos(precioUnitarioPara(p.escalones, 1))}
                         </span>
                       </button>
@@ -439,13 +434,9 @@ export function ConstructorRecibo({
             {productoElegido && (
               <div className="flex flex-wrap items-end gap-3">
                 {(productoElegido.variantes ?? []).length > 0 && (
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-semibold text-carbon">Tono</span>
-                    <select
-                      value={tonoElegidoId}
-                      onChange={(e) => setTonoElegidoId(e.target.value)}
-                      className="min-h-[44px] rounded-suave border-2 border-lila-suave bg-petalo px-3"
-                    >
+                  <label className="block min-w-40 flex-1">
+                    <span className={ETIQUETA}>{productoElegido.etiquetaVariante}</span>
+                    <select value={tonoElegidoId} onChange={(e) => setTonoElegidoId(e.target.value)} className={CAMPO}>
                       <option value="">Elige…</option>
                       {(productoElegido.variantes ?? []).map((t) => (
                         <option key={t.id} value={t.id}>
@@ -455,123 +446,115 @@ export function ConstructorRecibo({
                     </select>
                   </label>
                 )}
-
-                <label className="block">
-                  <span className="mb-1 block text-xs font-semibold text-carbon">Cantidad</span>
+                <label className="block w-28">
+                  <span className={ETIQUETA}>Cantidad</span>
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={1}
                     value={cantidadNueva}
                     onChange={(e) => setCantidadNueva(Math.max(1, Number(e.target.value)))}
-                    className="min-h-[44px] w-24 rounded-suave border-2 border-lila-suave bg-petalo px-3"
+                    className={CAMPO}
                   />
                 </label>
-
                 <Boton
                   type="button"
+                  variante="secundario"
                   onClick={agregarLinea}
                   disabled={(productoElegido.variantes ?? []).length > 0 && !tonoElegidoId}
                 >
-                  <IconoMas className="h-4 w-4" /> Agregar
+                  <IconoMas tamano={20} /> Agregar
                 </Boton>
               </div>
             )}
           </div>
 
-          {/* Líneas agregadas */}
           {detallesManual.length > 0 && (
-            <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-petalo">
-              <ul className="space-y-2">
+            <div className={`space-y-3 ${TARJETA}`}>
+              <ul className="divide-y divide-linea">
                 {detallesManual.map((d, i) => {
-                  const key = `${d.producto.id}-${d.linea.tonoId ?? "sin"}`;
-                  const lineaRecibo = lineasReciboManual.find(l => (l as any).key === key);
-                  if (!lineaRecibo) return null;
+                  const linea = lineasReciboManual[i];
+                  const nombre = `${d.producto.nombre}${d.linea.tonoNombre ? `, ${d.linea.tonoNombre}` : ""}`;
                   return (
-                  <li
-                    key={key}
-                    className="flex items-center justify-between gap-2 text-sm"
-                  >
-                    <span className="min-w-0 truncate">
-                      <span className="font-bold text-lila">{d.producto.referencia}</span>{" "}
-                      {d.producto.nombre}
-                      {d.linea.tonoNombre && (
-                        <strong className="text-fucsia"> · {d.linea.tonoNombre}</strong>
-                      )}{" "}
-                      x{d.linea.cantidad}
-                    </span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-carbon-suave text-xs">P.U. $</span>
-                      <input
-                        type="number"
-                        className="w-20 rounded border border-rosa-nube px-1 py-0.5 text-right font-semibold bg-white"
-                        value={lineaRecibo.precioUnitario}
-                        onChange={(e) => setPreciosManualOverride({...preciosManualOverride, [key]: Number(e.target.value)})}
-                      />
-                      <span className="font-semibold text-carbon min-w-[60px] text-right">
-                        {pesos(lineaRecibo.subtotal)}
+                    <li key={linea.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm text-tinta">
+                      <span className="w-full min-w-0 sm:w-auto sm:flex-1">
+                        <span className="font-semibold text-tinta-suave">{d.producto.referencia}</span> {d.producto.nombre}
+                        {d.linea.tonoNombre && <span className="font-semibold"> · {d.linea.tonoNombre}</span>}{" "}
+                        <span className="tabular-nums text-tinta-suave">× {d.linea.cantidad}</span>
                       </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          cambiarCantidad(d.producto.id, d.linea.tonoId, 0)
-                        }
-                        className="shrink-0 cursor-pointer text-xs text-carbon-suave underline hover:text-fucsia ml-1"
-                      >
-                        quitar
-                      </button>
-                    </div>
-                  </li>
+                      <span className="ml-auto flex items-center gap-2">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          aria-label={`Precio unitario de ${nombre}`}
+                          className={PRECIO}
+                          value={linea.precioUnitario}
+                          onChange={(e) =>
+                            setPreciosManualOverride({ ...preciosManualOverride, [linea.key]: Number(e.target.value) })
+                          }
+                        />
+                        <span className="min-w-20 text-right font-semibold tabular-nums">{pesos(linea.subtotal)}</span>
+                        <button
+                          type="button"
+                          aria-label={`Quitar ${nombre}`}
+                          onClick={() => cambiarCantidad(d.producto.id, d.linea.tonoId, 0)}
+                          className="min-h-11 cursor-pointer rounded-md px-2 font-semibold text-tinta underline underline-offset-2 hover:bg-superficie"
+                        >
+                          Quitar
+                        </button>
+                      </span>
+                    </li>
                   );
                 })}
               </ul>
 
-              <div className="space-y-1 border-t border-rosa-nube pt-3">
-                <div className="flex justify-between text-sm text-carbon-suave items-center">
+              <div className="space-y-2 border-t border-linea pt-3 text-sm">
+                <div className="flex justify-between text-tinta-suave">
                   <span>Subtotal</span>
-                  <span>{pesos(subtotalManualOverride)}</span>
+                  <span className="tabular-nums text-tinta">{pesos(subtotalManualOverride)}</span>
                 </div>
                 {totalesManual.porMayor && (
-                  <div className="flex justify-between text-sm font-semibold text-lila items-center">
+                  <div className="flex justify-between font-semibold text-ahorro">
                     <span>Precio por mayor (base)</span>
-                    <span>
-                      −{pesos(totalesManual.subtotalNormal - totalesManual.subtotalBase)}
-                    </span>
+                    <span className="tabular-nums">−{pesos(totalesManual.subtotalNormal - totalesManual.subtotalBase)}</span>
                   </div>
                 )}
-                
-                <div className="flex justify-between text-sm font-semibold text-lila items-center">
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1 text-xs text-carbon-suave cursor-pointer select-none font-normal">
-                      <input 
-                        type="checkbox" 
-                        checked={mostrarDescuentoManual} 
-                        onChange={(e) => setMostrarDescuentoManual(e.target.checked)} 
-                      />
-                      Mostrar en recibo
-                    </label>
-                    <span>Descuento $</span>
-                  </div>
-                  <input
-                    type="number"
-                    className="w-24 rounded border border-rosa-nube px-2 py-0.5 text-right font-semibold bg-white text-sm text-carbon"
-                    value={descuentoManualOverride ?? totalesManual.descuento}
-                    onChange={(e) => setDescuentoManualOverride(e.target.value === "" ? null : Number(e.target.value))}
-                  />
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <label className={CASILLA}>
+                    <input
+                      type="checkbox"
+                      className="size-5 accent-tinta"
+                      checked={mostrarDescuentoManual}
+                      onChange={(e) => setMostrarDescuentoManual(e.target.checked)}
+                    />
+                    Mostrar en el recibo
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-tinta">
+                    Descuento ($)
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      className={PRECIO}
+                      value={descuentoManualOverride ?? totalesManual.descuento}
+                      onChange={(e) => setDescuentoManualOverride(e.target.value === "" ? null : Number(e.target.value))}
+                    />
+                  </label>
                 </div>
-
-                <div className="flex justify-between pt-1 font-display text-lg text-carbon items-center">
-                  <span>Total</span>
-                  <span className="text-fucsia">
+                <p className="flex items-baseline justify-between pt-1 text-tinta">
+                  <span className="text-base font-semibold">Total</span>
+                  <span className="text-xl font-bold tabular-nums">
                     {pesos(subtotalManualOverride - (descuentoManualOverride ?? totalesManual.descuento))}
                   </span>
-                </div>
+                </p>
               </div>
             </div>
           )}
         </div>
       )}
 
-      <Boton ancho disabled={!listoParaDescargar || generando} onClick={alDescargar}>
+      <Boton ancho disabled={!listoParaDescargar} cargando={generando} onClick={alDescargar}>
         {generando ? "Generando PDF…" : "Descargar recibo en PDF"}
       </Boton>
     </div>

@@ -1,170 +1,117 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { crearClienteNavegador } from "@/lib/supabase/client";
+import { useState, useTransition } from "react";
+import { Boton } from "@/components/ui/Boton";
+import { Hoja } from "@/components/ui/Hoja";
+import { mostrarAviso } from "@/lib/avisos";
+import { NOMBRE_ESTADO, SIN_CONEXION_ESTADO } from "@/lib/admin/pedidos";
+import type { ConfiguracionPublica, EstadoPedido, Pedido } from "@/lib/types";
 import { cambiarEstadoPedido } from "./acciones-pedidos";
-import { pesos } from "@/lib/format";
-import { IconoWhatsApp } from "@/components/ui/Iconos";
-import type { Pedido, EstadoPedido } from "@/lib/types";
+import { useEnVivo } from "./PedidosEnVivo";
+import { TarjetaPedido } from "./TarjetaPedido";
 
-const ESTADOS: EstadoPedido[] = ["nuevo", "pagado", "enviado", "cancelado"];
-
-const COLOR_ESTADO: Record<EstadoPedido, string> = {
-  nuevo: "bg-fucsia/10 text-fucsia-texto",
-  pagado: "bg-lila-suave/50 text-lila-texto",
-  enviado: "bg-exito-fondo text-exito",
-  cancelado: "bg-gray-100 text-gray-500",
-};
-
-/** Normaliza a formato internacional colombiano para el enlace de WhatsApp. */
-function enlaceCliente(whatsapp: string): string {
-  const soloDigitos = whatsapp.replace(/\D/g, "");
-  const nacional = soloDigitos.slice(-10);
-  return `https://wa.me/57${nacional}`;
+function textoHecho(destino: EstadoPedido, deshaciendo: boolean): string {
+  if (deshaciendo) return `Volvió a ${NOMBRE_ESTADO[destino].toLocaleLowerCase("es")}`;
+  if (destino === "pagado") return "Pago confirmado";
+  if (destino === "enviado") return "Marcado como enviado";
+  if (destino === "cancelado") return "Pedido cancelado";
+  return `Quedó como ${NOMBRE_ESTADO[destino].toLocaleLowerCase("es")}`;
 }
 
-export function TablaPedidos({ pedidos }: { pedidos: Pedido[] }) {
-  const router = useRouter();
-  const [pendiente, iniciarTransicion] = useTransition();
-  const [abierto, setAbierto] = useState<string | null>(null);
+export function TablaPedidos({ pedidos, pago }: { pedidos: Pedido[]; pago: ConfiguracionPublica["pago"] }) {
+  const { abiertoDesde } = useEnVivo();
+  const [pendiente, iniciar] = useTransition();
+  const [guardando, setGuardando] = useState<{ id: string; destino: EstadoPedido } | null>(null);
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  const [porCancelar, setPorCancelar] = useState<Pedido | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
 
-  // Los pedidos nuevos entran solos: durante el live no hay que refrescar.
-  useEffect(() => {
-    const supabase = crearClienteNavegador();
+  // `deshaciendo`: las correcciones (pagado → nuevo, enviado → pagado) no ofrecen otro «Deshacer».
+  function cambiar(p: Pick<Pedido, "id" | "numeroPedido" | "estado">, destino: EstadoPedido, deshaciendo = false) {
+    setGuardando({ id: p.id, destino });
+    setErrores(({ [p.id]: _, ...resto }) => resto);
 
-    const canal = supabase
-      .channel("pedidos-en-vivo")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => router.refresh()
-      )
-      .subscribe();
+    iniciar(async () => {
+      // Sin red la acción rechaza («Failed to fetch»); un rechazo dentro de la transición subiría al
+      // límite de error del panel y taparía la lista. El error se queda en la tarjeta.
+      const resultado = (await cambiarEstadoPedido(p.id, destino).catch(() => null)) ?? {
+        ok: false as const,
+        error: SIN_CONEXION_ESTADO,
+      };
+      if (!resultado.ok) {
+        setErrores((previos) => ({ ...previos, [p.id]: resultado.error }));
+        return;
+      }
 
-    return () => {
-      supabase.removeChannel(canal);
-    };
-  }, [router]);
-
-  if (pedidos.length === 0) {
-    return (
-      <p className="py-16 text-center text-carbon-suave">
-        Todavía no hay pedidos con ese filtro.
-      </p>
-    );
+      const previo = p.estado;
+      mostrarAviso({
+        titulo: textoHecho(destino, deshaciendo),
+        detalle:
+          destino === "cancelado"
+            ? `${p.numeroPedido}. Las unidades volvieron al inventario.`
+            : p.numeroPedido,
+        accion:
+          deshaciendo || destino === "cancelado"
+            ? undefined
+            : {
+                etiqueta: "Deshacer",
+                alHacer: () => cambiar({ ...p, estado: destino }, previo, true),
+              },
+      });
+    });
   }
 
+  function pedirCancelar(p: Pedido) {
+    setPorCancelar(p);
+    setConfirmando(true);
+  }
+
+  function confirmarCancelacion() {
+    setConfirmando(false);
+    if (porCancelar) cambiar(porCancelar, "cancelado");
+  }
+
+  const unidadesPorCancelar = porCancelar?.lineas.reduce((suma, l) => suma + l.cantidad, 0) ?? 0;
+
   return (
-    <ul className="space-y-3">
-      {pedidos.map((p) => (
-        <li key={p.id} className="rounded-tarjeta bg-petalo p-4 shadow-petalo">
-          <button
-            onClick={() => setAbierto(abierto === p.id ? null : p.id)}
-            aria-expanded={abierto === p.id}
-            className="flex w-full cursor-pointer items-start gap-3 text-left"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-lg text-carbon">{p.numeroPedido}</p>
-              <p className="text-sm font-semibold text-carbon">{p.clienteNombre}</p>
-              <p className="text-xs text-carbon-suave">
-                {p.clienteWhatsapp} · {p.clienteCiudad}
-                
-              </p>
-              <p className="text-xs text-carbon-suave">
-                {new Date(p.creadoEn).toLocaleString("es-CO", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}
-              </p>
-            </div>
+    <>
+      <ul className="space-y-3">
+        {pedidos.map((p) => (
+          <li key={p.id}>
+            <TarjetaPedido
+              pedido={p}
+              pago={pago}
+              recienLlegado={p.estado === "nuevo" && Date.parse(p.creadoEn) > abiertoDesde}
+              guardando={pendiente && guardando?.id === p.id ? guardando.destino : null}
+              enEspera={pendiente && guardando?.id !== p.id}
+              error={errores[p.id] ?? null}
+              alCambiar={(destino) => cambiar(p, destino)}
+              alPedirCancelar={() => pedirCancelar(p)}
+            />
+          </li>
+        ))}
+      </ul>
 
-            <div className="shrink-0 text-right">
-              <p className="font-bold text-fucsia-texto">{pesos(p.total)}</p>
-              {(p.porMayor || p.porcentajeDescuento > 0) && (
-                <p className="text-xs text-lila-texto">
-                  {p.porMayor && "por mayor"}
-                  {p.porMayor && p.porcentajeDescuento > 0 && " + "}
-                  {p.porcentajeDescuento > 0 && `${p.porcentajeDescuento}%`}
-                </p>
-              )}
-              <span
-                className={`mt-1 inline-block rounded-pastilla px-3 py-1 text-xs font-bold ${COLOR_ESTADO[p.estado]}`}
-              >
-                {p.estado}
-              </span>
-            </div>
-          </button>
-
-          {abierto === p.id && (
-            <div className="mt-3 space-y-3 border-t border-rosa-nube pt-3">
-              {p.notasCliente && (
-                <p className="rounded-suave bg-alerta-fondo px-3 py-2 text-sm text-carbon">
-                  <strong>Nota de la clienta:</strong> {p.notasCliente}
-                </p>
-              )}
-
-              <ul className="space-y-1">
-                {p.lineas.map((l) => (
-                  <li key={l.id} className="flex justify-between gap-2 text-sm">
-                    <span className="min-w-0">
-                      <span className="text-xs font-bold text-lila-texto">{l.referencia}</span>{" "}
-                      {l.nombre}
-                      {l.tono && (
-                        <strong className="text-fucsia-texto"> · {l.tono}</strong>
-                      )}{" "}
-                      <span className="text-carbon-suave">x{l.cantidad}</span>
-                    </span>
-                    <span className="shrink-0 font-semibold text-carbon">
-                      {pesos(l.subtotal)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="flex flex-wrap gap-2">
-                {ESTADOS.filter((e) => e !== p.estado).map((e) => (
-                  <button
-                    key={e}
-                    disabled={pendiente}
-                    onClick={() =>
-                      iniciarTransicion(async () => {
-                        if (
-                          e === "cancelado" &&
-                          !confirm(
-                            `¿Cancelar el pedido ${p.numeroPedido}? El stock volverá al inventario.`
-                          )
-                        )
-                          return;
-
-                        await cambiarEstadoPedido(p.id, e);
-                        router.refresh();
-                      })
-                    }
-                    className="min-h-[44px] cursor-pointer rounded-pastilla border
-                               border-lila-suave px-4 text-xs font-semibold text-carbon-suave
-                               transition duration-200 hover:border-fucsia hover:text-fucsia
-                               disabled:opacity-40"
-                  >
-                    Marcar {e}
-                  </button>
-                ))}
-
-                <a
-                  href={enlaceCliente(p.clienteWhatsapp)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[44px] cursor-pointer items-center gap-1
-                             rounded-pastilla bg-fucsia px-4 text-xs font-semibold text-petalo"
-                >
-                  <IconoWhatsApp className="h-4 w-4" />
-                  Escribirle
-                </a>
-              </div>
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
+      <Hoja
+        abierta={confirmando}
+        alCerrar={() => setConfirmando(false)}
+        titulo={`¿Cancelar el pedido ${porCancelar?.numeroPedido ?? ""}?`}
+        pie={
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Boton type="button" variante="peligro" onClick={confirmarCancelacion}>
+              Sí, cancelar pedido
+            </Boton>
+            <Boton type="button" variante="secundario" data-autofocus onClick={() => setConfirmando(false)}>
+              No, dejarlo así
+            </Boton>
+          </div>
+        }
+      >
+        <p className="text-base leading-6 text-tinta">
+          {unidadesPorCancelar === 1 ? "La unidad vuelve" : `Las ${unidadesPorCancelar} unidades vuelven`} al
+          inventario y el pedido queda cerrado. No se puede deshacer.
+        </p>
+      </Hoja>
+    </>
   );
 }
