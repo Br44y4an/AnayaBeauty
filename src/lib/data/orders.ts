@@ -42,8 +42,6 @@ type FilaPedido = {
 };
 
 function mapearPedido(fila: FilaPedido): Pedido {
-  const codigo = Array.isArray(fila.access_codes) ? fila.access_codes[0] : fila.access_codes;
-
   return {
     id: fila.id,
     numeroPedido: fila.numero_pedido,
@@ -58,7 +56,6 @@ function mapearPedido(fila: FilaPedido): Pedido {
     total: fila.total,
     estado: fila.estado,
     notasAdmin: fila.notas_admin,
-    codigoUsado: codigo?.code ?? null,
     creadoEn: fila.created_at,
     lineas: (fila.order_items ?? []).map((l) => ({
       id: l.id,

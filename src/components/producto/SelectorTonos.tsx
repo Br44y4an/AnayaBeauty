@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { agruparTonos, filtrarTonos, necesitaBorde } from "@/lib/tonos";
 import { IconoBuscar, IconoCheck, IconoCerrar } from "@/components/ui/Iconos";
-import type { Tono } from "@/lib/types";
+import type { Variante } from "@/lib/types";
 
 /**
  * Selector de tono.
@@ -31,9 +31,9 @@ export function SelectorTonos({
   alElegir,
   idEtiqueta,
 }: {
-  tonos: Tono[];
-  elegido: Tono | null;
-  alElegir: (tono: Tono) => void;
+  tonos: Variante[];
+  elegido: Variante | null;
+  alElegir: (tono: Variante) => void;
   idEtiqueta?: string;
 }) {
   const [busqueda, setBusqueda] = useState("");
@@ -133,7 +133,7 @@ function BotonTono({
   activo,
   alElegir,
 }: {
-  tono: Tono;
+  tono: Variante;
   activo: boolean;
   alElegir: () => void;
 }) {

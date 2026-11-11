@@ -1,6 +1,11 @@
 import "server-only";
 import { clienteAdmin } from "@/lib/supabase/admin";
-import { mapearProducto, type FilaProducto } from "@/lib/data/catalog";
+import {
+  mapearCategoria,
+  mapearProducto,
+  type FilaCategoria,
+  type FilaProducto,
+} from "@/lib/data/catalogo";
 import { traerTodas } from "@/lib/data/paginacion";
 import { filtroBusqueda } from "@/lib/data/busqueda";
 import type { Producto, Categoria } from "@/lib/types";
@@ -13,10 +18,20 @@ import type { Producto, Categoria } from "@/lib/types";
 const CAMPOS = `
   id, referencia, nombre, descripcion, category_id,
   imagen_principal, galeria, stock, activo,
-  categories ( nombre ),
   price_tiers ( min_cantidad, precio_unitario ),
   product_shades ( id, nombre, color_hex, orden )
 `;
+
+/** Todas, también las ocultas: el nombre de la categoría de cada producto sale de aquí. */
+async function todasLasCategorias(): Promise<Categoria[]> {
+  const { data, error } = await clienteAdmin()
+    .from("categories")
+    .select("id, nombre, slug, orden, categoria_padre_id")
+    .overrideTypes<FilaCategoria[], { merge: false }>();
+
+  if (error) throw new Error(`No se pudieron cargar las categorías: ${error.message}`);
+  return (data ?? []).map(mapearCategoria);
+}
 
 export async function listarProductosAdmin(busqueda?: string): Promise<Producto[]> {
   const supabase = clienteAdmin();
@@ -26,23 +41,33 @@ export async function listarProductosAdmin(busqueda?: string): Promise<Producto[
   const paginaDe = (desde: number, hasta: number) => {
     let consulta = supabase.from("products").select(CAMPOS);
     if (busqueda?.trim()) consulta = consulta.or(filtroBusqueda(busqueda));
-    return consulta.order("referencia").range(desde, hasta);
+    return consulta.order("referencia").range(desde, hasta).overrideTypes<FilaProducto[], { merge: false }>();
   };
 
   // Sin paginar, PostgREST recorta la respuesta y los productos sobrantes
   // desaparecen del panel sin ningún error visible.
-  const filas = await traerTodas<FilaProducto>(paginaDe).catch((e: Error) => {
-    throw new Error(`No se pudieron cargar los productos: ${e.message}`);
-  });
+  const [filas, categorias] = await Promise.all([
+    traerTodas<FilaProducto>(paginaDe).catch((e: Error) => {
+      throw new Error(`No se pudieron cargar los productos: ${e.message}`);
+    }),
+    todasLasCategorias(),
+  ]);
 
-  return filas.map(mapearProducto);
+  return filas.map((fila) => mapearProducto(fila, categorias));
 }
 
 export async function obtenerProductoAdmin(id: string): Promise<Producto | null> {
-  const supabase = clienteAdmin();
-  const { data } = await supabase.from("products").select(CAMPOS).eq("id", id).maybeSingle();
+  const [{ data }, categorias] = await Promise.all([
+    clienteAdmin()
+      .from("products")
+      .select(CAMPOS)
+      .eq("id", id)
+      .maybeSingle()
+      .overrideTypes<FilaProducto, { merge: false }>(),
+    todasLasCategorias(),
+  ]);
 
-  return data ? mapearProducto(data as unknown as FilaProducto) : null;
+  return data ? mapearProducto(data, categorias) : null;
 }
 
 export async function listarCategoriasAdmin(): Promise<Categoria[]> {
@@ -51,17 +76,12 @@ export async function listarCategoriasAdmin(): Promise<Categoria[]> {
     .from("categories")
     .select("id, nombre, slug, orden, categoria_padre_id")
     .eq("activo", true)
-    .order("orden");
+    .order("orden")
+    .overrideTypes<FilaCategoria[], { merge: false }>();
 
   if (error) throw new Error(`No se pudieron cargar las categorías: ${error.message}`);
 
-  return (data ?? []).map((c) => ({
-    id: c.id,
-    nombre: c.nombre,
-    slug: c.slug,
-    orden: c.orden,
-    categoriaPadreId: c.categoria_padre_id,
-  }));
+  return (data ?? []).map(mapearCategoria);
 }
 
 export async function obtenerConfiguracion(): Promise<

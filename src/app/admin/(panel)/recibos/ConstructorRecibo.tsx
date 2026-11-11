@@ -83,8 +83,8 @@ export function ConstructorRecibo({
 
   function agregarLinea() {
     if (!productoElegido) return;
-    const tono = productoElegido.tonos.find((t) => t.id === tonoElegidoId) ?? null;
-    if (productoElegido.tonos.length > 0 && !tono) return;
+    const tono = (productoElegido.variantes ?? []).find((t) => t.id === tonoElegidoId) ?? null;
+    if ((productoElegido.variantes ?? []).length > 0 && !tono) return;
 
     setLineas((previas) => {
       const tonoId = tono?.id ?? null;
@@ -438,7 +438,7 @@ export function ConstructorRecibo({
 
             {productoElegido && (
               <div className="flex flex-wrap items-end gap-3">
-                {productoElegido.tonos.length > 0 && (
+                {(productoElegido.variantes ?? []).length > 0 && (
                   <label className="block">
                     <span className="mb-1 block text-xs font-semibold text-carbon">Tono</span>
                     <select
@@ -447,7 +447,7 @@ export function ConstructorRecibo({
                       className="min-h-[44px] rounded-suave border-2 border-lila-suave bg-petalo px-3"
                     >
                       <option value="">Elige…</option>
-                      {productoElegido.tonos.map((t) => (
+                      {(productoElegido.variantes ?? []).map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.nombre}
                         </option>
@@ -470,7 +470,7 @@ export function ConstructorRecibo({
                 <Boton
                   type="button"
                   onClick={agregarLinea}
-                  disabled={productoElegido.tonos.length > 0 && !tonoElegidoId}
+                  disabled={(productoElegido.variantes ?? []).length > 0 && !tonoElegidoId}
                 >
                   <IconoMas className="h-4 w-4" /> Agregar
                 </Boton>

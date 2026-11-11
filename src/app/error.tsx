@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { enlaceWhatsApp } from "@/lib/format";
+import { enlaceWhatsApp } from "@/lib/whatsapp";
 
 /**
  * Red de seguridad de toda la web pública.

@@ -36,7 +36,7 @@ export function FormularioProducto({
   const [errorImagen, setErrorImagen] = useState<string | null>(null);
 
   const [tonos, setTonos] = useState<FilaTono[]>(
-    producto?.tonos.map((t) => ({ nombre: t.nombre, colorHex: t.colorHex })) ?? []
+    producto?.variantes?.map((t) => ({ nombre: t.nombre, colorHex: t.colorHex })) ?? []
   );
 
   const [escalones, setEscalones] = useState<FilaEscalon[]>(

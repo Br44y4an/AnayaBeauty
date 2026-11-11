@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { obtenerPedidoPorId } from "@/lib/data/orders";
-import { obtenerConfiguracionPublica } from "@/lib/data/catalog";
-import { pesos, enlaceWhatsApp } from "@/lib/format";
+import { obtenerConfiguracionPublica } from "@/lib/data/configuracion";
+import { pesos } from "@/lib/format";
+import { enlaceWhatsApp } from "@/lib/whatsapp";
 import { Boton } from "@/components/ui/Boton";
 import { IconoWhatsApp, IconoCheck } from "@/components/ui/Iconos";
 import { CopiarDato } from "./CopiarDato";
@@ -50,7 +51,7 @@ export default async function PaginaPedido({
       </div>
 
       <h1 className="pt-5 text-center font-display text-3xl leading-tight text-fucsia-texto">
-        {config.mensaje_exito ?? "¡Gracias por tu compra, princesa! ✨"}
+        {config.mensajeExito ?? "¡Gracias por tu compra, princesa! ✨"}
       </h1>
 
       <p className="pt-3 text-center text-carbon-suave">
@@ -73,7 +74,7 @@ export default async function PaginaPedido({
             },
             {
               titulo: "Haz el pago",
-              texto: config.pago_numero
+              texto: config.pago.numero
                 ? `Transfiere ${pesos(pedido.total)} a los datos que están abajo.`
                 : "Te escribimos por WhatsApp para coordinarlo.",
             },
@@ -108,16 +109,16 @@ export default async function PaginaPedido({
       </section>
 
       {/* ---- Datos de pago ---- */}
-      {config.pago_numero && (
+      {config.pago.numero && (
         <section className="mt-4 space-y-2 rounded-tarjeta bg-petalo p-5 text-center shadow-petalo">
           <h2 className="font-semibold text-carbon">Para completar tu pago</h2>
-          <p className="font-display text-2xl text-lila-texto">{config.pago_metodo}</p>
+          <p className="font-display text-2xl text-lila-texto">{config.pago.metodo}</p>
 
-          <CopiarDato valor={config.pago_numero} />
+          <CopiarDato valor={config.pago.numero} />
 
-          {config.pago_titular && (
+          {config.pago.titular && (
             <p className="text-sm text-carbon-suave">
-              a nombre de {config.pago_titular}
+              a nombre de {config.pago.titular}
             </p>
           )}
 
@@ -193,7 +194,7 @@ export default async function PaginaPedido({
 
       <div className="mt-6 space-y-3">
         <a
-          href={enlaceWhatsApp(mensajeWhatsApp)}
+          href={enlaceWhatsApp(mensajeWhatsApp, config.whatsappNegocio)}
           target="_blank"
           rel="noopener noreferrer"
           className="block"

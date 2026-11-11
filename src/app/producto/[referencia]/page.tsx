@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { obtenerProductoPorReferencia } from "@/lib/data/catalog";
+import { obtenerProductoPorReferencia } from "@/lib/data/catalogo";
+import { decodificarReferencia } from "@/lib/rutas";
 import { PanelCompra } from "@/components/producto/PanelCompra";
 import { FotoProducto } from "@/components/producto/FotoProducto";
 import { IconoFlechaIzquierda } from "@/components/ui/Iconos";
@@ -12,8 +13,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ referencia: string }>;
 }) {
-  const { referencia } = await params;
-  const producto = await obtenerProductoPorReferencia(decodeURIComponent(referencia));
+  const referencia = decodificarReferencia((await params).referencia);
+  const producto = referencia ? await obtenerProductoPorReferencia(referencia) : null;
 
   if (!producto) return { title: "Producto no encontrado — Anaya Beauty" };
 
@@ -37,8 +38,8 @@ export default async function PaginaProducto({
 }: {
   params: Promise<{ referencia: string }>;
 }) {
-  const { referencia } = await params;
-  const producto = await obtenerProductoPorReferencia(decodeURIComponent(referencia));
+  const referencia = decodificarReferencia((await params).referencia);
+  const producto = referencia ? await obtenerProductoPorReferencia(referencia) : null;
 
   if (!producto) notFound();
 

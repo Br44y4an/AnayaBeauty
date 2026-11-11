@@ -1,10 +1,11 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { SelectorTonos } from "@/components/producto/SelectorTonos";
-import type { Tono } from "@/lib/types";
+import type { Variante } from "@/lib/types";
 
-function tono(nombre: string, colorHex: string, orden = 0): Tono {
-  return { id: `${nombre}`, nombre, colorHex, orden };
+function tono(nombre: string, colorHex: string, orden = 0): Variante {
+  return { id: `${nombre}`, nombre, colorHex, orden, agotado: false };
 }
 
 const CORTA = [

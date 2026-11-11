@@ -10,9 +10,9 @@ import { Esqueleto } from "@/components/ui/Esqueleto";
 import { IconoBolsa, IconoCorazon, IconoBasura } from "@/components/ui/Iconos";
 import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
-import { usarCarrito, usarLineasDeProducto, usarUnidadesDeProducto } from "@/lib/cart";
+import { useCarrito, useLineasDeProducto, useUnidadesDeProducto } from "@/lib/cart";
 import { cargarTonos } from "@/app/acciones-catalogo";
-import type { Producto, Tono } from "@/lib/types";
+import type { Producto, Variante } from "@/lib/types";
 
 /**
  * Hoja de compra: elegir tono, elegir cantidad y agregar, sin salir del
@@ -29,29 +29,29 @@ export function HojaCompra({
   producto: Producto;
   alCerrar: () => void;
 }) {
-  const necesitaTono = producto.numTonos > 0;
+  const necesitaTono = producto.numVariantes > 0;
 
   // Si el producto ya trae los tonos (pantalla de detalle) no se vuelven
   // a pedir; si viene de la grilla, llegan vacíos y se cargan aquí.
-  const [tonos, setTonos] = useState<Tono[]>(producto.tonos);
+  const [tonos, setTonos] = useState<Variante[]>(producto.variantes ?? []);
   const [cargandoTonos, setCargandoTonos] = useState(
-    necesitaTono && producto.tonos.length === 0
+    necesitaTono && !producto.variantes?.length
   );
   const [fallo, setFallo] = useState(false);
 
-  const [tono, setTono] = useState<Tono | null>(null);
+  const [tono, setTono] = useState<Variante | null>(null);
   const [cantidad, setCantidad] = useState(1);
 
-  const agregar = usarCarrito((e) => e.agregar);
-  const establecer = usarCarrito((e) => e.establecer);
-  const lineas = usarLineasDeProducto(producto.id);
-  const yaEnBolsa = usarUnidadesDeProducto(producto.id);
+  const agregar = useCarrito((e) => e.agregar);
+  const establecer = useCarrito((e) => e.establecer);
+  const lineas = useLineasDeProducto(producto.id);
+  const yaEnBolsa = useUnidadesDeProducto(producto.id);
 
   useEffect(() => {
     if (!cargandoTonos) return;
 
     let vigente = true;
-    cargarTonos(producto.id)
+    cargarTonos(producto.referencia)
       .then((t) => {
         if (!vigente) return;
         setTonos(t);
@@ -65,7 +65,7 @@ export function HojaCompra({
     return () => {
       vigente = false;
     };
-  }, [producto.id, cargandoTonos]);
+  }, [producto.referencia, cargandoTonos]);
 
   useEffect(() => {
     if (!cargandoTonos && tonos.length === 1 && !tono) setTono(tonos[0]);
@@ -182,7 +182,7 @@ export function HojaCompra({
             <h3 id="titulo-tonos" className="text-base font-bold text-carbon">
               Elige tu tono
               <span className="pl-1 font-normal text-carbon-suave">
-                ({producto.numTonos})
+                ({producto.numVariantes})
               </span>
             </h3>
 

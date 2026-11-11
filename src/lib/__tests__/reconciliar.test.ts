@@ -5,7 +5,7 @@ import {
   explicarLinea,
   type Disponibilidad,
 } from "@/lib/carrito/reconciliar";
-import type { LineaCarrito } from "@/lib/types";
+import type { LineaCarrito, Variante } from "@/lib/types";
 
 function linea(
   productoId: string,
@@ -20,10 +20,18 @@ function linea(
   };
 }
 
-const disponible = (id: string, stock: number): Disponibilidad => ({
+const disponible = (id: string, stock: number, variantes: Variante[] = []): Disponibilidad => ({
   id,
   stock,
   activo: true,
+  variantes,
+});
+
+const oculto = (id: string, stock: number): Disponibilidad => ({
+  id,
+  stock,
+  activo: false,
+  variantes: [],
 });
 
 describe("reconciliarCarrito", () => {
@@ -53,10 +61,7 @@ describe("reconciliarCarrito", () => {
   });
 
   it("marca como no-disponible el producto oculto del catálogo", () => {
-    const r = reconciliarCarrito(
-      [linea("a", 2)],
-      [{ id: "a", stock: 99, activo: false }]
-    );
+    const r = reconciliarCarrito([linea("a", 2)], [oculto("a", 99)]);
 
     expect(r.lineas[0].estado).toBe("no-disponible");
     expect(r.lineas[0].cantidad).toBe(0);
@@ -121,6 +126,79 @@ describe("reconciliarCarrito", () => {
   });
 });
 
+/**
+ * Bolsas guardadas por la v4: el panel viejo regeneraba los id de los tonos
+ * en cada guardado, así que un id guardado puede no existir aunque el tono sí.
+ */
+describe("reconciliarCarrito · variantes", () => {
+  const rojo: Variante = { id: "v-rojo", nombre: "Rojo", colorHex: "#c00000", orden: 1, agotado: false };
+  const nude: Variante = { id: "v-nude", nombre: "Nude", colorHex: "#d8b49c", orden: 2, agotado: true };
+  const conVariantes = (stock: number) => disponible("a", stock, [rojo, nude]);
+  const guardada = (tonoId: string | null, tonoNombre: string | null, cantidad = 1): LineaCarrito => ({
+    productoId: "a",
+    tonoId,
+    tonoNombre,
+    cantidad,
+  });
+
+  it("recupera por nombre una variante cuyo id cambió y trae el id nuevo", () => {
+    const r = reconciliarCarrito([guardada("id-viejo", "Rojo", 2)], [conVariantes(5)]);
+
+    expect(r.lineas[0].estado).toBe("ok");
+    expect(r.lineas[0].cantidad).toBe(2);
+    expect(r.lineas[0].linea).toEqual({ productoId: "a", tonoId: "v-rojo", tonoNombre: "Rojo", cantidad: 2 });
+  });
+
+  it("conserva la línea tal como está guardada, para poder cambiarla en la bolsa", () => {
+    const r = reconciliarCarrito([guardada("id-viejo", "Rojo", 2)], [conVariantes(5)]);
+    expect(r.lineas[0].original.tonoId).toBe("id-viejo");
+  });
+
+  it("recupera el nombre aunque cambien mayúsculas o espacios", () => {
+    const r = reconciliarCarrito([guardada("id-viejo", " ROJO ")], [conVariantes(5)]);
+
+    expect(r.lineas[0].estado).toBe("ok");
+    expect(r.lineas[0].linea.tonoId).toBe("v-rojo");
+  });
+
+  it("marca no-disponible una variante borrada", () => {
+    const r = reconciliarCarrito([guardada("id-viejo", "Fucsia")], [conVariantes(5)]);
+
+    expect(r.lineas[0].estado).toBe("no-disponible");
+    expect(r.lineas[0].cantidad).toBe(0);
+  });
+
+  it("marca agotada la variante agotada sin gastar el stock de las demás", () => {
+    const r = reconciliarCarrito(
+      [guardada("v-nude", "Nude", 2), guardada("v-rojo", "Rojo", 5)],
+      [conVariantes(5)]
+    );
+
+    expect(r.lineas[0].estado).toBe("agotada");
+    expect(r.lineas[0].cantidad).toBe(0);
+    expect(r.lineas[1].estado).toBe("ok");
+    expect(r.lineas[1].cantidad).toBe(5);
+  });
+
+  it("pide elegir variante si el producto ahora tiene y la línea no trae", () => {
+    const r = reconciliarCarrito([guardada(null, null)], [conVariantes(5)]);
+    expect(r.lineas[0].estado).toBe("no-disponible");
+  });
+
+  it("manda al pedido el nombre actual de la variante recuperada", () => {
+    const r = reconciliarCarrito([guardada("id-viejo", "rojo")], [conVariantes(5)]);
+    expect(itemsParaPedido(r)).toEqual([{ producto_id: "a", cantidad: 1, tono: "Rojo" }]);
+  });
+
+  it("explica qué variante se agotó", () => {
+    const r = reconciliarCarrito([guardada("v-nude", "Nude")], [conVariantes(5)]);
+    const mensaje = explicarLinea(r.lineas[0], "Labial");
+
+    expect(mensaje).toContain("Nude");
+    expect(mensaje).toContain("se agotó");
+  });
+});
+
 describe("itemsParaPedido", () => {
   it("manda exactamente lo que el carrito mostró, no lo que se pidió", () => {
     // Ésta es la regresión que importa: antes la pantalla recortaba a 3 y
@@ -136,7 +214,7 @@ describe("itemsParaPedido", () => {
   it("excluye las líneas que no se pueden pedir", () => {
     const r = reconciliarCarrito(
       [linea("a", 1), linea("b", 1), linea("c", 1)],
-      [disponible("a", 5), disponible("b", 0), { id: "c", stock: 9, activo: false }]
+      [disponible("a", 5), disponible("b", 0), oculto("c", 9)]
     );
 
     expect(itemsParaPedido(r)).toEqual([
@@ -159,10 +237,7 @@ describe("explicarLinea", () => {
 
   it("distingue agotado de retirado del catálogo", () => {
     const agotada = reconciliarCarrito([linea("a", 1)], [disponible("a", 0)]);
-    const retirada = reconciliarCarrito(
-      [linea("a", 1)],
-      [{ id: "a", stock: 5, activo: false }]
-    );
+    const retirada = reconciliarCarrito([linea("a", 1)], [oculto("a", 5)]);
 
     expect(explicarLinea(agotada.lineas[0], "Labial")).toContain("se agotó");
     expect(explicarLinea(retirada.lineas[0], "Labial")).toContain("ya no está");

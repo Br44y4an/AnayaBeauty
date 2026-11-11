@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { usarTotalUnidades } from "@/lib/cart";
+import { useTotalUnidades } from "@/lib/cart";
 import { IconoBolsa } from "@/components/ui/Iconos";
 
 /** Donde el botón estorbaría en vez de ayudar. */
@@ -19,7 +19,7 @@ const RUTAS_SIN_BOTON = ["/carrito", "/confirmar", "/admin", "/pedido"];
 export function BotonFlotante() {
   const [montado, setMontado] = useState(false);
   const ruta = usePathname();
-  const unidades = usarTotalUnidades();
+  const unidades = useTotalUnidades();
 
   // localStorage no existe durante el renderizado en el servidor:
   // esperar al montaje evita el desajuste de hidratación.

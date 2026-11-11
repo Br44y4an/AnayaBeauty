@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { filtroBusqueda } from "@/lib/data/busqueda";
+import {
+  compactarReferencia,
+  filtroBusqueda,
+  gruposDeBusqueda,
+  normalizarTexto,
+} from "@/lib/data/busqueda";
 
 /**
  * Regresión: el término del buscador se metía crudo en el filtro `or()` de
@@ -88,5 +93,62 @@ describe("filtroBusqueda · comodines de LIKE", () => {
     expect(filtroBusqueda("base, matte", ["nombre"])).toBe(
       'nombre.ilike."%base, matte%"'
     );
+  });
+});
+
+describe("normalizarTexto", () => {
+  it("quita tildes y mayúsculas como lo hace normalizar() en la base", () => {
+    expect(normalizarTexto("Pestañina RÍMEL Ácido")).toBe("pestanina rimel acido");
+  });
+});
+
+describe("compactarReferencia", () => {
+  it("deja solo letras y números, para comparar referencias escritas de cualquier forma", () => {
+    expect(compactarReferencia("USK-621")).toBe("usk621");
+    expect(compactarReferencia("Ac 80/150")).toBe("ac80150");
+  });
+});
+
+/**
+ * Cada grupo es una palabra que el producto debe contener; las alternativas
+ * de un grupo van unidas por «|». El SQL de `buscar_productos` las lee así.
+ */
+describe("gruposDeBusqueda", () => {
+  it.each<[string, string[]]>([
+    ["Pestañas", ["pestana"]],
+    ["brocha para polvo", ["brocha", "polvo"]],
+    ["rimel", ["rimel|mascara|pestanina"]],
+    ["Rímel", ["rimel|mascara|pestanina"]],
+    ["usk621", ["usk621"]],
+    ["GLS-735", ["gls", "735"]],
+    ["a", []],
+    ["de la", []],
+    ["lápices", ["lapiz"]],
+    ["bases", ["base"]],
+    ["brillos", ["gloss|brillo"]],
+  ])("«%s» → %j", (q, grupos) => {
+    expect(gruposDeBusqueda(q)).toEqual(grupos);
+  });
+
+  it("los sinónimos valen también en plural (§8.4 del spec: labial|lipstick)", () => {
+    expect(gruposDeBusqueda("labiales rojos")).toEqual(["labial|lipstick", "rojo"]);
+  });
+
+  it("no repite un grupo cuando dos palabras son sinónimas", () => {
+    expect(gruposDeBusqueda("máscara pestañina")).toEqual(["rimel|mascara|pestanina"]);
+  });
+
+  it("nunca manda más de 5 grupos", () => {
+    expect(gruposDeBusqueda("uno dos tres cuatro cinco seis siete")).toEqual([
+      "uno",
+      "dos",
+      "tres",
+      "cuatro",
+      "cinco",
+    ]);
+  });
+
+  it("no recorta las referencias que terminan en s", () => {
+    expect(gruposDeBusqueda("RB801S")).toEqual(["rb801s"]);
   });
 });

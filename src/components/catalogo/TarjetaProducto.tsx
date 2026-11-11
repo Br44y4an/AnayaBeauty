@@ -6,7 +6,7 @@ import { memo, useState } from "react";
 import dynamic from "next/dynamic";
 import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
-import { usarCarrito, usarLineasDeProducto, usarUnidadesDeProducto } from "@/lib/cart";
+import { useCarrito, useLineasDeProducto, useUnidadesDeProducto } from "@/lib/cart";
 import {
   IconoCorazon,
   IconoMas,
@@ -37,10 +37,10 @@ const HojaCompra = dynamic(() =>
  * DOS PROBLEMAS QUE ESTA VERSIÓN ARREGLA
  *
  * 1. "Se traba." La tarjeta se suscribía al carrito ENTERO
- *    (`usarCarrito((e) => e.lineas)`). Con 591 tarjetas en pantalla,
+ *    (`useCarrito((e) => e.lineas)`). Con 591 tarjetas en pantalla,
  *    tocar un "+" cambiaba la lista y React re-renderizaba las 591 — con
  *    sus imágenes, sus paletas y sus cálculos de precio. Ahora usa
- *    `usarLineasDeProducto`, que solo cambia si cambia ESTE producto, y
+ *    `useLineasDeProducto`, que solo cambia si cambia ESTE producto, y
  *    va envuelta en `memo`.
  *
  * 2. "Los tonos son muchísimos y me obligan a verlos." Los círculos de
@@ -58,17 +58,17 @@ function TarjetaProductoBase({ producto }: { producto: Producto }) {
   const [visorAbierto, setVisorAbierto] = useState(false);
   const [hojaAbierta, setHojaAbierta] = useState(false);
 
-  const agregar = usarCarrito((e) => e.agregar);
-  const establecer = usarCarrito((e) => e.establecer);
+  const agregar = useCarrito((e) => e.agregar);
+  const establecer = useCarrito((e) => e.establecer);
 
   // Suscripciones finas: esta tarjeta solo se entera de lo suyo.
-  const lineas = usarLineasDeProducto(producto.id);
-  const yaEnBolsa = usarUnidadesDeProducto(producto.id);
+  const lineas = useLineasDeProducto(producto.id);
+  const yaEnBolsa = useUnidadesDeProducto(producto.id);
 
   const sinStock = producto.stock === 0;
   const sinPrecio = producto.escalones.length === 0;
   const tieneCombo = producto.escalones.length > 1;
-  const necesitaTono = producto.numTonos > 0;
+  const necesitaTono = producto.numVariantes > 0;
   const puedeSumar = yaEnBolsa < producto.stock;
 
   const unitarioActual = sinPrecio

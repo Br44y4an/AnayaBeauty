@@ -1,4 +1,5 @@
-import type { Tono } from "@/lib/types";
+import type { Variante } from "@/lib/types";
+import { normalizarTexto } from "@/lib/data/busqueda";
 
 /**
  * Ayudas para paletas largas.
@@ -105,20 +106,13 @@ export function familiaDeColor(hex: string): FamiliaColor {
   return "rosados";
 }
 
-/** Normaliza para comparar: sin tildes, sin mayúsculas, sin espacios extra. */
-function normalizar(texto: string): string {
-  return texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
-}
+const normalizar = (texto: string) => normalizarTexto(texto).trim();
 
 /**
  * Filtra por nombre de tono. Tolera tildes y mayúsculas porque la clienta
  * escribe "rubi" buscando "Rubí".
  */
-export function filtrarTonos(tonos: Tono[], texto: string): Tono[] {
+export function filtrarTonos(tonos: Variante[], texto: string): Variante[] {
   const busqueda = normalizar(texto);
   if (!busqueda) return tonos;
   return tonos.filter((t) => normalizar(t.nombre).includes(busqueda));
@@ -127,7 +121,7 @@ export function filtrarTonos(tonos: Tono[], texto: string): Tono[] {
 export type GrupoTonos = {
   clave: FamiliaColor;
   etiqueta: string;
-  tonos: Tono[];
+  tonos: Variante[];
 };
 
 /**
@@ -137,12 +131,12 @@ export type GrupoTonos = {
  * cuatro títulos añade ruido en vez de quitarlo. Se devuelve entonces un
  * único grupo sin etiqueta.
  */
-export function agruparTonos(tonos: Tono[], minimoParaAgrupar = 10): GrupoTonos[] {
+export function agruparTonos(tonos: Variante[], minimoParaAgrupar = 10): GrupoTonos[] {
   if (tonos.length < minimoParaAgrupar) {
     return tonos.length ? [{ clave: "neutros", etiqueta: "", tonos }] : [];
   }
 
-  const porFamilia = new Map<FamiliaColor, Tono[]>();
+  const porFamilia = new Map<FamiliaColor, Variante[]>();
   for (const tono of tonos) {
     const familia = familiaDeColor(tono.colorHex);
     const grupo = porFamilia.get(familia);
@@ -166,11 +160,4 @@ export function agruparTonos(tonos: Tono[], minimoParaAgrupar = 10): GrupoTonos[
 export function necesitaBorde(hex: string): boolean {
   const hsl = hexAHsl(hex);
   return hsl === null || hsl.l > 0.82;
-}
-
-/** Texto legible encima del color (para la marca de "elegido"). */
-export function textoSobre(hex: string): "claro" | "oscuro" {
-  const hsl = hexAHsl(hex);
-  if (!hsl) return "oscuro";
-  return hsl.l > 0.55 ? "oscuro" : "claro";
 }

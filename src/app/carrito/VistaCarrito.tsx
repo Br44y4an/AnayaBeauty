@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { usarCarrito } from "@/lib/cart";
+import { useCarrito } from "@/lib/cart";
 import {
   cargarCarrito,
   confirmarPedido,
@@ -18,7 +18,8 @@ import {
   type LineaReconciliada,
 } from "@/lib/carrito/reconciliar";
 import { calcularTotales, unitarioDeLinea, siguienteBeneficio } from "@/lib/discounts";
-import { pesos, enlaceWhatsApp } from "@/lib/format";
+import { pesos } from "@/lib/format";
+import { enlaceWhatsApp } from "@/lib/whatsapp";
 import { Boton } from "@/components/ui/Boton";
 import { Esqueleto } from "@/components/ui/Esqueleto";
 import {
@@ -52,12 +53,12 @@ import {
  */
 export function VistaCarrito() {
   const router = useRouter();
-  const lineas = usarCarrito((e) => e.lineas);
-  const establecer = usarCarrito((e) => e.establecer);
-  const quitar = usarCarrito((e) => e.quitar);
-  const vaciar = usarCarrito((e) => e.vaciar);
-  const claveEnvio = usarCarrito((e) => e.claveEnvio);
-  const prepararEnvio = usarCarrito((e) => e.prepararEnvio);
+  const lineas = useCarrito((e) => e.lineas);
+  const establecer = useCarrito((e) => e.establecer);
+  const quitar = useCarrito((e) => e.quitar);
+  const vaciar = useCarrito((e) => e.vaciar);
+  const claveEnvio = useCarrito((e) => e.claveEnvio);
+  const prepararEnvio = useCarrito((e) => e.prepararEnvio);
 
   const [datos, setDatos] = useState<DatosCarrito | null>(null);
   const [falloCarga, setFalloCarga] = useState(false);
@@ -139,6 +140,7 @@ export function VistaCarrito() {
     // Un producto sin precio configurado no se puede cobrar: para la
     // clienta es exactamente lo mismo que si no estuviera.
     activo: p.activo && p.escalones.length > 0,
+    variantes: p.variantes,
   }));
 
   const carrito = reconciliarCarrito(lineas, disponibilidad);
@@ -158,7 +160,7 @@ export function VistaCarrito() {
   function ajustarBolsa() {
     for (const l of carrito.lineas) {
       if (l.estado === "ok") continue;
-      establecer(l.linea.productoId, l.linea.tonoId, l.cantidad);
+      establecer(l.original.productoId, l.original.tonoId, l.cantidad);
     }
   }
 
@@ -211,7 +213,7 @@ export function VistaCarrito() {
                 nombre={producto?.nombre ?? "Producto no disponible"}
                 tono={l.linea.tonoNombre}
                 motivo={explicarLinea(l, producto?.nombre ?? "Este producto") ?? ""}
-                alQuitar={() => quitar(l.linea.productoId, l.linea.tonoId)}
+                alQuitar={() => quitar(l.original.productoId, l.original.tonoId)}
               />
             );
           }
@@ -240,8 +242,8 @@ export function VistaCarrito() {
               cantidad={l.cantidad}
               unitario={unitario}
               puedeSumar={usadasDelProducto < producto.stock}
-              alCambiar={(n) => establecer(l.linea.productoId, l.linea.tonoId, n)}
-              alQuitar={() => quitar(l.linea.productoId, l.linea.tonoId)}
+              alCambiar={(n) => establecer(l.original.productoId, l.original.tonoId, n)}
+              alQuitar={() => quitar(l.original.productoId, l.original.tonoId)}
             />
           );
         })}

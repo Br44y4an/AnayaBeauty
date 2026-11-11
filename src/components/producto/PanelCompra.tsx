@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
 import { pesos } from "@/lib/format";
-import { usarCarrito, usarLineasDeProducto, usarUnidadesDeProducto } from "@/lib/cart";
+import { useCarrito, useLineasDeProducto, useUnidadesDeProducto } from "@/lib/cart";
 import { Boton } from "@/components/ui/Boton";
 import { IconoBolsa, IconoCheck, IconoBasura } from "@/components/ui/Iconos";
 import { SelectorCantidad } from "./SelectorCantidad";
 import { SelectorTonos } from "./SelectorTonos";
 import { TablaEscalones } from "./TablaEscalones";
-import type { Producto, Tono } from "@/lib/types";
+import type { Producto, Variante } from "@/lib/types";
 
 /**
  * Panel de compra de la pantalla de detalle.
@@ -21,16 +21,16 @@ import type { Producto, Tono } from "@/lib/types";
  */
 export function PanelCompra({ producto }: { producto: Producto }) {
   const [cantidad, setCantidad] = useState(1);
-  const [tono, setTono] = useState<Tono | null>(null);
+  const [tono, setTono] = useState<Variante | null>(null);
   const [agregado, setAgregado] = useState(false);
 
-  const agregar = usarCarrito((e) => e.agregar);
-  const establecer = usarCarrito((e) => e.establecer);
+  const agregar = useCarrito((e) => e.agregar);
+  const establecer = useCarrito((e) => e.establecer);
 
   // Los tonos comparten el inventario del producto: lo que ya está en la
   // bolsa reduce lo que todavía se puede agregar.
-  const yaEnBolsa = usarUnidadesDeProducto(producto.id);
-  const lineasDeEsteProducto = usarLineasDeProducto(producto.id);
+  const yaEnBolsa = useUnidadesDeProducto(producto.id);
+  const lineasDeEsteProducto = useLineasDeProducto(producto.id);
   const disponible = Math.max(0, producto.stock - yaEnBolsa);
 
   if (producto.stock === 0) {
@@ -51,8 +51,8 @@ export function PanelCompra({ producto }: { producto: Producto }) {
     );
   }
 
-  const tonos = producto.tonos;
-  const necesitaTono = tonos.length > 0 || producto.numTonos > 0;
+  const tonos = producto.variantes ?? [];
+  const necesitaTono = tonos.length > 0 || producto.numVariantes > 0;
   const puedeAgregar = disponible > 0 && (!necesitaTono || tono !== null);
 
   // Los tonos comparten escalón: lo que ya está en la bolsa cuenta para

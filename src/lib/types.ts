@@ -1,4 +1,7 @@
 import type { Escalon } from "@/lib/pricing";
+import type { ReglaDescuento } from "@/lib/discounts";
+
+export type EtiquetaVariante = "Tono" | "Color" | "Diseño" | "Modelo" | "Aroma" | "Largo" | "Paleta";
 
 export type Categoria = {
   id: string;
@@ -6,13 +9,15 @@ export type Categoria = {
   slug: string;
   orden: number;
   categoriaPadreId: string | null;
+  etiquetaVariante: EtiquetaVariante | null;
 };
 
-export type Tono = {
+export type Variante = {
   id: string;
   nombre: string;
   colorHex: string;
   orden: number;
+  agotado: boolean;
 };
 
 export type Producto = {
@@ -22,29 +27,22 @@ export type Producto = {
   descripcion: string | null;
   categoriaId: string | null;
   categoriaNombre: string | null;
+  categoriaSlug: string | null;
   imagenPrincipal: string | null;
   galeria: string[];
   stock: number;
   activo: boolean;
+  destacado: boolean;
   escalones: Escalon[];
-  /**
-   * Cuántos tonos tiene el producto.
-   *
-   * La grilla del catálogo ya NO trae los tonos: con 591 productos y
-   * paletas de 30 colores eran ~12.000 filas extra por pantalla, y la
-   * clienta veía un muro de círculos de productos que ni le interesaban.
-   * Aquí solo viaja el número (para saber si hay que ofrecer la hoja de
-   * tonos) y los tonos se piden al abrirla.
-   */
-  numTonos: number;
-  /** Vacío en la grilla; completo en el detalle y en la hoja de tonos. */
-  tonos: Tono[];
+  etiquetaVariante: EtiquetaVariante;
+  numVariantes: number;
+  /** null = no se cargaron (grilla); la ficha las trae en el orden de la foto. */
+  variantes: Variante[] | null;
 };
 
 /**
- * Lo que se guarda en el navegador. Nunca incluye precios.
- * La identidad de una línea es producto + tono: dos tonos del mismo
- * producto son dos líneas separadas.
+ * Lo que se guarda en el navegador (versión 3 del almacenamiento): nunca
+ * precios. La identidad de una línea es producto + variante.
  */
 export type LineaCarrito = {
   productoId: string;
@@ -71,7 +69,6 @@ export type Pedido = {
   clienteNombre: string;
   clienteWhatsapp: string;
   clienteCiudad: string;
-  /** Indicaciones que la clienta escribió al confirmar (opcional). */
   notasCliente: string | null;
   subtotal: number;
   descuento: number;
@@ -80,7 +77,50 @@ export type Pedido = {
   total: number;
   estado: EstadoPedido;
   notasAdmin: string | null;
-  codigoUsado: string | null;
   creadoEn: string;
   lineas: LineaPedido[];
+};
+
+export type OrdenCatalogo = "destacados" | "precio-asc" | "precio-desc" | "nuevos";
+
+export type PaginaProductos = {
+  productos: Producto[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+};
+
+export type SugerenciaProducto = {
+  referencia: string;
+  nombre: string;
+  imagenPrincipal: string | null;
+  precioBase: number | null;
+  numVariantes: number;
+  etiquetaVariante: EtiquetaVariante;
+};
+
+export type ProductoBolsa = {
+  id: string;
+  referencia: string;
+  nombre: string;
+  imagenPrincipal: string | null;
+  stock: number;
+  activo: boolean;
+  escalones: Escalon[];
+  etiquetaVariante: EtiquetaVariante;
+  variantes: Variante[];
+};
+
+export type DatosBolsa = {
+  productos: ProductoBolsa[];
+  reglas: ReglaDescuento[];
+  umbralPorMayor: number;
+};
+
+export type ConfiguracionPublica = {
+  mensajeExito: string | null;
+  umbralPorMayor: number;
+  whatsappNegocio: string;
+  envioInfo: string;
+  pago: { metodo: string | null; numero: string | null; titular: string | null };
 };

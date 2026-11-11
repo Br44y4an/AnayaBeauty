@@ -5,13 +5,12 @@ import {
   filtrarTonos,
   agruparTonos,
   necesitaBorde,
-  textoSobre,
   FAMILIAS,
 } from "@/lib/tonos";
-import type { Tono } from "@/lib/types";
+import type { Variante } from "@/lib/types";
 
-function tono(nombre: string, colorHex: string, orden = 0): Tono {
-  return { id: `${nombre}-${colorHex}`, nombre, colorHex, orden };
+function tono(nombre: string, colorHex: string, orden = 0): Variante {
+  return { id: `${nombre}-${colorHex}`, nombre, colorHex, orden, agotado: false };
 }
 
 describe("hexAHsl", () => {
@@ -177,14 +176,6 @@ describe("necesitaBorde", () => {
 
   it("pide borde si el color no se pudo leer", () => {
     expect(necesitaBorde("???")).toBe(true);
-  });
-});
-
-describe("textoSobre", () => {
-  it("usa texto oscuro encima de colores claros y claro encima de oscuros", () => {
-    expect(textoSobre("#ffffff")).toBe("oscuro");
-    expect(textoSobre("#000000")).toBe("claro");
-    expect(textoSobre("#e01b24")).toBe("claro");
   });
 });
 

@@ -1,32 +1,17 @@
-import type { LineaCarrito } from "@/lib/types";
+import type { LineaCarrito, Variante } from "@/lib/types";
+import { normalizarTexto } from "@/lib/data/busqueda";
 
 /**
- * Reconcilia el carrito guardado en el navegador contra lo que de verdad
- * hay en la tienda ahora mismo.
- *
- * POR QUÉ EXISTE ESTE MÓDULO
- *
- * El carrito vive en `localStorage` y puede tener días. Mientras tanto un
- * producto se agota, se oculta o le queda menos stock del que la clienta
- * apartó. Antes cada pantalla resolvía eso por su cuenta:
- *
- *   · `VistaCarrito` descartaba en silencio las líneas sin stock y pintaba
- *     un total que solo contaba las que sobrevivían;
- *   · `FormularioConfirmar` serializaba las líneas CRUDAS del store, con
- *     las descartadas incluidas.
- *
- * Resultado: el carrito mostraba $80.000, la clienta pulsaba "Confirmar" y
- * el servidor respondía SIN_STOCK por un producto que ella ya no veía en
- * pantalla. La venta se caía en el último paso, que es el peor sitio.
- *
- * Ahora hay una sola respuesta a "¿qué se puede pedir?", y las dos
- * pantallas la usan: lo que se ve es exactamente lo que se envía.
+ * Contrasta la bolsa guardada en el navegador (puede tener días) con la
+ * tienda de ahora. Lo que se pinta y lo que se envía salen de aquí, así que
+ * lo que la clienta ve es exactamente lo que se pide.
  */
 
 export type Disponibilidad = {
   id: string;
   stock: number;
   activo: boolean;
+  variantes: Variante[];
 };
 
 /** Qué le pasó a una línea al contrastarla con la tienda. */
@@ -35,13 +20,16 @@ export type EstadoLinea =
   | "ok"
   /** Se puede pedir, pero menos unidades de las que pidió. */
   | "ajustada"
-  /** No queda ni una unidad. */
+  /** No queda ni una unidad, o su variante está agotada. */
   | "agotada"
-  /** El producto ya no está en el catálogo. */
+  /** El producto o su variante ya no están en el catálogo. */
   | "no-disponible";
 
 export type LineaReconciliada = {
+  /** La línea con la variante vigente: id y nombre de hoy. */
   linea: LineaCarrito;
+  /** La línea tal como está guardada: con ella se cambia o se quita de la bolsa. */
+  original: LineaCarrito;
   /** Unidades realmente pedibles. 0 si no se puede pedir nada. */
   cantidad: number;
   /** Lo que la clienta había pedido, para poder explicarle el ajuste. */
@@ -60,15 +48,26 @@ export type CarritoReconciliado = {
   hayCambios: boolean;
 };
 
+const mismoNombre = (a: string, b: string) =>
+  normalizarTexto(a).trim() === normalizarTexto(b).trim();
+
 /**
- * @param lineas        lo que la clienta tiene guardado
- * @param disponibilidad stock y visibilidad actuales, por producto
- *
- * Los tonos de un producto comparten inventario, así que el stock se
- * reparte entre sus líneas en el orden en que fueron agregadas: la
- * primera se sirve completa, la siguiente con lo que quede. Es el mismo
- * criterio que usa `crear_pedido` al validar contra la suma del producto,
- * de modo que un carrito que aquí sale entero no puede fallar allá.
+ * El panel de la v4 regeneraba los id de las variantes en cada guardado: si
+ * el id ya no existe, se busca la variante por su nombre.
+ */
+function varianteVigente(linea: LineaCarrito, variantes: Variante[]): Variante | null {
+  const nombre = linea.tonoNombre;
+  return (
+    variantes.find((v) => v.id === linea.tonoId) ??
+    (nombre === null ? undefined : variantes.find((v) => mismoNombre(v.nombre, nombre))) ??
+    null
+  );
+}
+
+/**
+ * Las variantes de un producto comparten inventario, así que el stock se
+ * reparte entre sus líneas en el orden en que se agregaron: el mismo criterio
+ * de `crear_pedido`, de modo que una bolsa que aquí sale entera no falla allá.
  */
 export function reconciliarCarrito(
   lineas: LineaCarrito[],
@@ -77,27 +76,38 @@ export function reconciliarCarrito(
   const porId = new Map(disponibilidad.map((d) => [d.id, d]));
   const yaRepartido = new Map<string, number>();
 
-  const reconciliadas: LineaReconciliada[] = lineas.map((linea) => {
-    const cantidadPedida = Math.max(0, Math.floor(linea.cantidad));
-    const producto = porId.get(linea.productoId);
+  const reconciliadas = lineas.map((original): LineaReconciliada => {
+    const cantidadPedida = Math.max(0, Math.floor(original.cantidad));
+    const sinNada = (linea: LineaCarrito, estado: EstadoLinea): LineaReconciliada => ({
+      linea,
+      original,
+      cantidad: 0,
+      cantidadPedida,
+      estado,
+    });
 
-    // Sin fila, o con el producto oculto: ya no existe para la tienda.
-    if (!producto || !producto.activo) {
-      return { linea, cantidad: 0, cantidadPedida, estado: "no-disponible" };
+    const producto = porId.get(original.productoId);
+    if (!producto || !producto.activo) return sinNada(original, "no-disponible");
+
+    let linea = original;
+    if (producto.variantes.length > 0) {
+      const variante = varianteVigente(original, producto.variantes);
+      if (!variante) return sinNada(original, "no-disponible");
+
+      if (variante.id !== original.tonoId || variante.nombre !== original.tonoNombre) {
+        linea = { ...original, tonoId: variante.id, tonoNombre: variante.nombre };
+      }
+      if (variante.agotado) return sinNada(linea, "agotada");
     }
 
-    const usado = yaRepartido.get(linea.productoId) ?? 0;
-    const libre = Math.max(0, producto.stock - usado);
-    const cantidad = Math.min(cantidadPedida, libre);
+    const usado = yaRepartido.get(original.productoId) ?? 0;
+    const cantidad = Math.min(cantidadPedida, Math.max(0, producto.stock - usado));
+    yaRepartido.set(original.productoId, usado + cantidad);
 
-    yaRepartido.set(linea.productoId, usado + cantidad);
-
-    if (cantidad < 1) {
-      return { linea, cantidad: 0, cantidadPedida, estado: "agotada" };
-    }
-
+    if (cantidad < 1) return sinNada(linea, "agotada");
     return {
       linea,
+      original,
       cantidad,
       cantidadPedida,
       estado: cantidad < cantidadPedida ? "ajustada" : "ok",
@@ -116,20 +126,21 @@ export function reconciliarCarrito(
 }
 
 /**
- * Mensaje corto y sin jerga para explicar una línea que cambió.
- * "Agotado" y "ya no está" son cosas distintas y la clienta merece saber
- * cuál de las dos le pasó.
+ * Mensaje corto para una línea que cambió. «Se agotó» y «ya no está
+ * disponible» son cosas distintas y la clienta merece saber cuál le pasó.
  */
 export function explicarLinea(l: LineaReconciliada, nombre: string): string | null {
+  const variante = l.linea.tonoNombre;
+
   switch (l.estado) {
     case "ok":
       return null;
     case "ajustada":
-      return `De ${nombre} quedaban ${l.cantidad}, no ${l.cantidadPedida}. Te dejamos ${l.cantidad}.`;
+      return `De ${variante ? `${nombre} (${variante})` : nombre} solo quedan ${l.cantidad}: ajustamos la cantidad (pediste ${l.cantidadPedida}).`;
     case "agotada":
-      return `${nombre} se agotó mientras armabas tu pedido.`;
+      return `${variante ? `${variante} de ${nombre}` : nombre} se agotó.`;
     case "no-disponible":
-      return `${nombre} ya no está en el catálogo.`;
+      return `${variante ? `${variante} de ${nombre}` : nombre} ya no está disponible.`;
   }
 }
 

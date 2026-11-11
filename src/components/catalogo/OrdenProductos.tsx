@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-import type { OrdenCatalogo } from "@/lib/data/catalog";
+import type { OrdenCatalogo } from "@/lib/types";
 
 const OPCIONES: { valor: OrdenCatalogo; etiqueta: string }[] = [
   { valor: "destacados", etiqueta: "Los que recomendamos" },

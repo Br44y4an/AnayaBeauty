@@ -1,21 +1,7 @@
 /**
- * Filtro de búsqueda para PostgREST.
- *
- * Hay DOS trampas distintas en la misma cadena y las dos han roto el
- * buscador alguna vez:
- *
- * 1. LA COMA. En `or(...)` la coma separa las condiciones, así que un
- *    término como "base, matte" partía el filtro en pedazos inválidos:
- *    PostgREST respondía "failed to parse logic tree", la consulta
- *    lanzaba y la página entera moría con un 500 (que en el navegador se
- *    ve como "Minified React error #441"). Se resuelve entrecomillando
- *    el valor; dentro de las comillas solo hay que escapar la barra
- *    invertida y la comilla doble.
- *
- * 2. LOS COMODINES DE LIKE. `%` y `_` son comodines para `ilike`, no
- *    texto. Buscar "50%" devolvía cualquier cosa que empezara por "50",
- *    y "A_1" traía "A11", "AB1"… La clienta escribe un guion bajo porque
- *    está en la referencia, no porque quiera un comodín.
+ * Filtro `or()` de PostgREST para el panel. El valor va entre comillas porque
+ * la coma separa condiciones («base, matte» daba un 500), y `%` y `_` se
+ * escapan porque en `ilike` son comodines, no texto («A_1» traía «A11»).
  */
 
 const COLUMNAS_POR_DEFECTO = ["nombre", "referencia"];
@@ -45,4 +31,58 @@ export function filtroBusqueda(
 ): string {
   const patron = escaparComillas(`%${escaparComodines(texto.trim())}%`);
   return columnas.map((columna) => `${columna}.ilike."${patron}"`).join(",");
+}
+
+/* Búsqueda de la tienda: cada grupo es una palabra que el producto debe
+   contener; sus alternativas van unidas por «|». `buscar_productos` (SQL)
+   las compara con el mismo texto normalizado y con la referencia compacta. */
+
+const MAX_GRUPOS = 5;
+
+const VACIAS = new Set([
+  "de", "del", "la", "las", "el", "los", "y", "en", "con", "para", "por", "un", "una",
+]);
+
+const SINONIMOS = [
+  ["rimel", "mascara", "pestanina"],
+  ["blush", "rubor"],
+  ["gloss", "brillo"],
+  ["neceser", "cosmetiquera"],
+  ["labial", "lipstick"],
+  ["delineador", "delineadora"],
+  ["corrector", "concealer"],
+  ["iluminador", "highlighter"],
+];
+
+/** Sin tildes ni mayúsculas, igual que `normalizar()` en la base. */
+export function normalizarTexto(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+/** "USK-621" → "usk621": así se comparan referencias escritas de cualquier forma. */
+export function compactarReferencia(s: string): string {
+  return normalizarTexto(s).replace(/[^a-z0-9]/g, "");
+}
+
+/** Singular aproximado; solo en palabras, para no recortar referencias. */
+function singular(palabra: string): string {
+  if (!/^[a-z]+$/.test(palabra)) return palabra;
+  if (palabra.length > 4 && palabra.endsWith("ces")) return `${palabra.slice(0, -3)}z`;
+  if (palabra.length > 6 && palabra.endsWith("es")) return palabra.slice(0, -2);
+  if (palabra.length > 4 && palabra.endsWith("s")) return palabra.slice(0, -1);
+  return palabra;
+}
+
+export function gruposDeBusqueda(q: string): string[] {
+  const grupos = new Set<string>();
+
+  for (const palabra of normalizarTexto(q).split(/[^a-z0-9]+/)) {
+    if (palabra.length < 2 || VACIAS.has(palabra)) continue;
+
+    const base = singular(palabra);
+    const sinonimos = SINONIMOS.find((g) => g.includes(palabra) || g.includes(base));
+    grupos.add(sinonimos ? sinonimos.join("|") : base);
+  }
+
+  return [...grupos].slice(0, MAX_GRUPOS);
 }

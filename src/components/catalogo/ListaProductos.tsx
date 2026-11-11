@@ -6,8 +6,7 @@ import { Boton } from "@/components/ui/Boton";
 import { EsqueletoTarjeta } from "@/components/ui/Esqueleto";
 import { IconoFlechaAbajo, IconoBuscar } from "@/components/ui/Iconos";
 import { cargarMasProductos } from "@/app/acciones-catalogo";
-import type { OrdenCatalogo } from "@/lib/data/catalog";
-import type { Producto } from "@/lib/types";
+import type { OrdenCatalogo, Producto } from "@/lib/types";
 
 /**
  * La grilla del catálogo, por tandas.
@@ -58,7 +57,7 @@ export function ListaProductos({
         return [...previos, ...resultado.productos.filter((p) => !vistos.has(p.id))];
       });
       setPagina(siguiente);
-      setHayMas(resultado.hayMas);
+      setHayMas(resultado.pagina * resultado.porPagina < resultado.total);
     } catch {
       setFallo("No pudimos traer más productos. Revisa tu conexión e inténtalo de nuevo.");
     } finally {

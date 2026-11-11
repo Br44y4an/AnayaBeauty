@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pesos, enlaceWhatsApp, WHATSAPP_NEGOCIO } from "@/lib/format";
+import { fechaCorta, fechaHora, pesos } from "@/lib/format";
 
 describe("pesos", () => {
   it("formatea con punto de miles y sin decimales", () => {
@@ -17,15 +17,24 @@ describe("pesos", () => {
   });
 });
 
-describe("enlaceWhatsApp", () => {
-  it("apunta al número del negocio con el mensaje codificado", () => {
-    const url = enlaceWhatsApp("Hola, quiero mi código");
-    expect(url).toBe(
-      `https://wa.me/${WHATSAPP_NEGOCIO}?text=Hola%2C%20quiero%20mi%20c%C3%B3digo`
-    );
+/** Bogotá es UTC−5 todo el año: 01:42 UTC del 11 son las 8:42 p. m. del 10. */
+describe("fechas en hora de Bogotá", () => {
+  it("fechaCorta da día y mes abreviado del día de Bogotá", () => {
+    expect(fechaCorta("2026-11-11T01:42:00Z")).toBe("10 nov");
   });
 
-  it("usa el número del negocio en formato internacional sin signos", () => {
-    expect(WHATSAPP_NEGOCIO).toBe("573228813646");
+  it("fechaHora da la hora de 12 horas con a. m. y p. m.", () => {
+    expect(fechaHora("2026-11-11T01:42:00Z")).toBe("10 nov, 8:42 p. m.");
+    expect(fechaHora("2026-11-10T14:05:00Z")).toBe("10 nov, 9:05 a. m.");
+  });
+
+  it("medianoche y mediodía son las 12", () => {
+    expect(fechaHora("2026-11-10T05:00:00Z")).toBe("10 nov, 12:00 a. m.");
+    expect(fechaHora("2026-11-10T17:30:00Z")).toBe("10 nov, 12:30 p. m.");
+  });
+
+  it("una fecha inválida no se pinta como «Invalid Date»", () => {
+    expect(fechaCorta("no es una fecha")).toBe("");
+    expect(fechaHora("")).toBe("");
   });
 });

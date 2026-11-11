@@ -1,10 +1,7 @@
 import { Suspense } from "react";
-import {
-  obtenerProductos,
-  obtenerCategorias,
-  obtenerConfiguracionDePrecios,
-  type OrdenCatalogo,
-} from "@/lib/data/catalog";
+import { obtenerProductos, obtenerCategorias } from "@/lib/data/catalogo";
+import { obtenerConfiguracionDePrecios } from "@/lib/data/configuracion";
+import { ordenDeParametro } from "@/lib/rutas";
 import { Encabezado } from "@/components/catalogo/Encabezado";
 import { Buscador } from "@/components/catalogo/Buscador";
 import { ChipsCategorias } from "@/components/catalogo/ChipsCategorias";
@@ -15,8 +12,6 @@ import { Esqueleto } from "@/components/ui/Esqueleto";
 
 export const revalidate = 30;
 
-const ORDENES: OrdenCatalogo[] = ["destacados", "precio-asc", "precio-desc", "nuevos"];
-
 export default async function PaginaCatalogo({
   searchParams,
 }: {
@@ -24,9 +19,7 @@ export default async function PaginaCatalogo({
 }) {
   const filtros = await searchParams;
 
-  const orden: OrdenCatalogo = ORDENES.includes(filtros.orden as OrdenCatalogo)
-    ? (filtros.orden as OrdenCatalogo)
-    : "destacados";
+  const orden = ordenDeParametro(filtros.orden);
 
   const [pagina, categorias, precios] = await Promise.all([
     obtenerProductos({
@@ -91,7 +84,7 @@ export default async function PaginaCatalogo({
             key={`${filtros.q ?? ""}|${filtros.categoria ?? ""}|${orden}`}
             inicial={pagina.productos}
             total={pagina.total}
-            hayMasInicial={pagina.hayMas}
+            hayMasInicial={pagina.productos.length < pagina.total}
             filtros={{
               busqueda: filtros.q,
               categoriaSlug: filtros.categoria,

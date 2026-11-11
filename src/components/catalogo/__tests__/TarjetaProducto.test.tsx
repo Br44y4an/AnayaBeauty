@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { TarjetaProducto } from "@/components/catalogo/TarjetaProducto";
-import { usarCarrito } from "@/lib/cart";
+import { useCarrito } from "@/lib/cart";
 import type { Producto } from "@/lib/types";
 
 const base: Producto = {
@@ -11,23 +12,26 @@ const base: Producto = {
   descripcion: null,
   categoriaId: null,
   categoriaNombre: null,
+  categoriaSlug: null,
   imagenPrincipal: null,
   galeria: [],
   stock: 10,
   activo: true,
+  destacado: false,
   escalones: [
     { minCantidad: 1, precioUnitario: 10000 },
     { minCantidad: 3, precioUnitario: 9000 },
   ],
-  numTonos: 0,
-  tonos: [],
+  etiquetaVariante: "Tono",
+  numVariantes: 0,
+  variantes: null,
 };
 
 /** Un producto con paleta. La tarjeta solo sabe CUÁNTOS tonos hay. */
-const conTonos: Producto = { ...base, id: "p2", referencia: "REF-202", numTonos: 24 };
+const conTonos: Producto = { ...base, id: "p2", referencia: "REF-202", numVariantes: 24 };
 
 describe("TarjetaProducto", () => {
-  beforeEach(() => usarCarrito.getState().vaciar());
+  beforeEach(() => useCarrito.getState().vaciar());
 
   it("NO pinta la paleta de tonos en la grilla", () => {
     // La queja original: "estoy obligada a ver los tonos de productos que
@@ -51,7 +55,7 @@ describe("TarjetaProducto", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^agregar$/i }));
 
-    expect(usarCarrito.getState().lineas).toEqual([
+    expect(useCarrito.getState().lineas).toEqual([
       { productoId: "p1", tonoId: null, tonoNombre: null, cantidad: 1 },
     ]);
   });
@@ -61,10 +65,10 @@ describe("TarjetaProducto", () => {
     fireEvent.click(screen.getByRole("button", { name: /^agregar$/i }));
 
     fireEvent.click(screen.getByRole("button", { name: /agregar uno de/i }));
-    expect(usarCarrito.getState().lineas[0].cantidad).toBe(2);
+    expect(useCarrito.getState().lineas[0].cantidad).toBe(2);
 
     fireEvent.click(screen.getByRole("button", { name: /quitar uno de/i }));
-    expect(usarCarrito.getState().lineas[0].cantidad).toBe(1);
+    expect(useCarrito.getState().lineas[0].cantidad).toBe(1);
   });
 
   it("muestra el precio que se está cobrando ahora, no el más barato del combo", () => {
@@ -75,7 +79,7 @@ describe("TarjetaProducto", () => {
   });
 
   it("baja el precio en pantalla al alcanzar el escalón", () => {
-    usarCarrito.getState().agregar("p1", 3);
+    useCarrito.getState().agregar("p1", 3);
     render(<TarjetaProducto producto={base} />);
 
     expect(screen.getByText(/\$9\.000/)).toBeInTheDocument();
@@ -118,15 +122,15 @@ describe("TarjetaProducto", () => {
   });
 
   it("solo cuenta lo suyo: lo de otro producto no aparece en esta tarjeta", () => {
-    usarCarrito.getState().agregar("otro-producto", 5);
+    useCarrito.getState().agregar("otro-producto", 5);
     render(<TarjetaProducto producto={base} />);
 
     expect(screen.queryByText(/en tu bolsa/i)).not.toBeInTheDocument();
   });
 
   it("muestra cuántas lleva de este producto, sumando sus tonos", () => {
-    usarCarrito.getState().agregar("p2", 2, { id: "t1", nombre: "Rubí" });
-    usarCarrito.getState().agregar("p2", 1, { id: "t2", nombre: "Vino" });
+    useCarrito.getState().agregar("p2", 2, { id: "t1", nombre: "Rubí" });
+    useCarrito.getState().agregar("p2", 1, { id: "t2", nombre: "Vino" });
 
     render(<TarjetaProducto producto={conTonos} />);
 

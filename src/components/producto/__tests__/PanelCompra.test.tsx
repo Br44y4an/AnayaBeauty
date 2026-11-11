@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { PanelCompra } from "@/components/producto/PanelCompra";
-import { usarCarrito } from "@/lib/cart";
+import { useCarrito } from "@/lib/cart";
 import type { Producto } from "@/lib/types";
 
 const labial: Producto = {
@@ -11,32 +12,35 @@ const labial: Producto = {
   descripcion: null,
   categoriaId: null,
   categoriaNombre: null,
+  categoriaSlug: null,
   imagenPrincipal: null,
   galeria: [],
   stock: 4,
   activo: true,
+  destacado: false,
   escalones: [
     { minCantidad: 1, precioUnitario: 10000 },
     { minCantidad: 3, precioUnitario: 9000 },
     { minCantidad: 6, precioUnitario: 8000 },
   ],
-  numTonos: 0,
-  tonos: [],
+  etiquetaVariante: "Tono",
+  numVariantes: 0,
+  variantes: [],
 };
 
 const conTonos: Producto = {
   ...labial,
   stock: 10,
-  numTonos: 2,
-  tonos: [
-    { id: "t1", nombre: "Cereza", colorHex: "#C81E4A", orden: 0 },
-    { id: "t2", nombre: "Vino", colorHex: "#6E1E38", orden: 1 },
+  numVariantes: 2,
+  variantes: [
+    { id: "t1", nombre: "Cereza", colorHex: "#C81E4A", orden: 0, agotado: false },
+    { id: "t2", nombre: "Vino", colorHex: "#6E1E38", orden: 1, agotado: false },
   ],
 };
 
 describe("PanelCompra", () => {
   beforeEach(() => {
-    usarCarrito.getState().vaciar();
+    useCarrito.getState().vaciar();
   });
 
   it("muestra el subtotal del escalón que aplica", () => {
@@ -70,7 +74,7 @@ describe("PanelCompra", () => {
     fireEvent.click(screen.getByRole("button", { name: /aumentar/i }));
     fireEvent.click(screen.getByRole("button", { name: /agregar/i }));
 
-    expect(usarCarrito.getState().lineas).toEqual([
+    expect(useCarrito.getState().lineas).toEqual([
       { productoId: "p1", tonoId: null, tonoNombre: null, cantidad: 2 },
     ]);
   });
@@ -93,14 +97,14 @@ describe("PanelCompra", () => {
 });
 
 describe("PanelCompra con tonos", () => {
-  beforeEach(() => usarCarrito.getState().vaciar());
+  beforeEach(() => useCarrito.getState().vaciar());
 
   it("no deja agregar hasta que se elige un tono", () => {
     render(<PanelCompra producto={conTonos} />);
 
     const boton = screen.getByRole("button", { name: /elige un tono/i });
     expect(boton).toBeDisabled();
-    expect(usarCarrito.getState().lineas).toEqual([]);
+    expect(useCarrito.getState().lineas).toEqual([]);
   });
 
   it("habilita la compra al elegir un tono y lo guarda en el carrito", () => {
@@ -111,7 +115,7 @@ describe("PanelCompra con tonos", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /agregar/i }));
 
-    expect(usarCarrito.getState().lineas).toEqual([
+    expect(useCarrito.getState().lineas).toEqual([
       { productoId: "p1", tonoId: "t1", tonoNombre: "Cereza", cantidad: 1 },
     ]);
   });
@@ -133,7 +137,7 @@ describe("PanelCompra con tonos", () => {
   it("cuenta los tonos ya en la bolsa para elegir el escalón", () => {
     // Ya hay 2 de un tono: agregar 1 de OTRO tono llega a 3 unidades del
     // producto, así que esa unidad ya se cobra al precio del escalón de 3.
-    usarCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Cereza" });
+    useCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Cereza" });
 
     render(<PanelCompra producto={conTonos} />);
     fireEvent.click(screen.getByRole("radio", { name: "Vino" }));
@@ -144,8 +148,8 @@ describe("PanelCompra con tonos", () => {
   it("pinta lo que ya está en la bolsa al precio del escalón alcanzado", () => {
     // 2 de Cereza + 1 de Vino = 3 unidades → las tres a $9.000, así que la
     // línea de Cereza vale $18.000 y no $20.000.
-    usarCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Cereza" });
-    usarCarrito.getState().agregar("p1", 1, { id: "t2", nombre: "Vino" });
+    useCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Cereza" });
+    useCarrito.getState().agregar("p1", 1, { id: "t2", nombre: "Vino" });
 
     render(<PanelCompra producto={conTonos} />);
 
@@ -154,8 +158,8 @@ describe("PanelCompra con tonos", () => {
 
   it("descuenta del disponible lo que ya está en la bolsa, sumando tonos", () => {
     // stock 10; metemos 8 entre dos tonos, deben quedar 2
-    usarCarrito.getState().agregar("p1", 5, { id: "t1", nombre: "Cereza" });
-    usarCarrito.getState().agregar("p1", 3, { id: "t2", nombre: "Vino" });
+    useCarrito.getState().agregar("p1", 5, { id: "t1", nombre: "Cereza" });
+    useCarrito.getState().agregar("p1", 3, { id: "t2", nombre: "Vino" });
 
     render(<PanelCompra producto={conTonos} />);
     fireEvent.click(screen.getByRole("radio", { name: "Cereza" }));

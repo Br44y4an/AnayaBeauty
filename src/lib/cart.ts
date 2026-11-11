@@ -4,28 +4,20 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { LineaCarrito } from "@/lib/types";
 
 /**
- * Carrito guardado en el navegador.
- *
- * La identidad de una línea es producto + tono. Dos tonos del mismo labial
- * son dos líneas independientes; el mismo tono suma cantidades.
- *
- * Nunca guarda precios: solo producto + tono + cantidad. El total real lo
- * recalcula PostgreSQL al confirmar, así que un carrito manipulado no
- * puede cambiar lo que se cobra.
+ * Bolsa guardada en el navegador. Nunca guarda precios: el total real lo
+ * recalcula PostgreSQL al confirmar, así que una bolsa manipulada no cambia
+ * lo que se cobra.
  */
 
-type EstadoCarrito = {
+export const CLAVE_CARRITO = "anaya-carrito";
+
+type Guardado = {
   lineas: LineaCarrito[];
-  /**
-   * Identificador del intento de compra en curso.
-   *
-   * Viaja hasta `crear_pedido`, que lo guarda en `orders`. Si el mismo
-   * envío llega dos veces —doble toque en el botón, o el navegador
-   * reintentando tras una señal mala— el servidor reconoce la clave y
-   * devuelve el pedido que ya creó, en vez de duplicarlo y descontar el
-   * stock otra vez. Se renueva cuando la bolsa vuelve a cambiar.
-   */
+  /** Llave del intento de compra: un envío repetido devuelve el mismo pedido. */
   claveEnvio: string | null;
+};
+
+type EstadoCarrito = Guardado & {
   agregar: (
     productoId: string,
     cantidad: number,
@@ -33,17 +25,21 @@ type EstadoCarrito = {
   ) => void;
   establecer: (productoId: string, tonoId: string | null, cantidad: number) => void;
   quitar: (productoId: string, tonoId: string | null) => void;
+  /** Deshacer: devuelve una línea quitada a su posición. */
+  restaurar: (linea: LineaCarrito, indice: number) => void;
   vaciar: () => void;
   /** Prepara (o reutiliza) la clave del envío que está por hacerse. */
   prepararEnvio: () => string;
 };
 
-/** Identidad de una línea: mismo producto y mismo tono. */
+/** Identidad de una línea: mismo producto y misma variante. */
 function esLaMisma(l: LineaCarrito, productoId: string, tonoId: string | null): boolean {
   return l.productoId === productoId && l.tonoId === tonoId;
 }
 
-/** UUID v4. `crypto.randomUUID` no existe en navegadores viejos ni en SSR. */
+const esCantidadValida = (n: number) => Number.isInteger(n) && n >= 1;
+
+/** UUID v4. `crypto.randomUUID` no existe en navegadores viejos ni sin HTTPS. */
 function nuevaClave(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -54,7 +50,9 @@ function nuevaClave(): string {
   });
 }
 
-export const usarCarrito = create<EstadoCarrito>()(
+// Todo cambio de la bolsa pone `claveEnvio` en null: lo que se confirme
+// tiene que ser lo que hay ahora, no un envío preparado antes.
+export const useCarrito = create<EstadoCarrito>()(
   persist(
     (set, get) => ({
       lineas: [],
@@ -62,30 +60,21 @@ export const usarCarrito = create<EstadoCarrito>()(
 
       agregar: (productoId, cantidad, tono) =>
         set((estado) => {
-          if (!Number.isInteger(cantidad) || cantidad < 1) return estado;
+          if (!esCantidadValida(cantidad)) return estado;
 
           const tonoId = tono?.id ?? null;
-          const existente = estado.lineas.find((l) => esLaMisma(l, productoId, tonoId));
-
-          if (existente) {
-            return {
-              // Cambiar la bolsa invalida el envío preparado: lo que se
-              // confirme tiene que ser lo que hay ahora, no lo de antes.
-              claveEnvio: null,
-              lineas: estado.lineas.map((l) =>
-                esLaMisma(l, productoId, tonoId)
-                  ? { ...l, cantidad: l.cantidad + cantidad }
-                  : l
-              ),
-            };
-          }
+          const existe = estado.lineas.some((l) => esLaMisma(l, productoId, tonoId));
 
           return {
             claveEnvio: null,
-            lineas: [
-              ...estado.lineas,
-              { productoId, tonoId, tonoNombre: tono?.nombre ?? null, cantidad },
-            ],
+            lineas: existe
+              ? estado.lineas.map((l) =>
+                  esLaMisma(l, productoId, tonoId) ? { ...l, cantidad: l.cantidad + cantidad } : l
+                )
+              : [
+                  ...estado.lineas,
+                  { productoId, tonoId, tonoNombre: tono?.nombre ?? null, cantidad },
+                ],
           };
         }),
 
@@ -106,6 +95,17 @@ export const usarCarrito = create<EstadoCarrito>()(
           lineas: estado.lineas.filter((l) => !esLaMisma(l, productoId, tonoId)),
         })),
 
+      restaurar: (linea, indice) =>
+        set((estado) => {
+          // Si la clienta ya la volvió a agregar, deshacer no la duplica.
+          if (!esCantidadValida(linea.cantidad)) return estado;
+          if (estado.lineas.some((l) => esLaMisma(l, linea.productoId, linea.tonoId))) return estado;
+
+          const lineas = [...estado.lineas];
+          lineas.splice(Math.min(Math.max(0, indice), lineas.length), 0, linea);
+          return { lineas, claveEnvio: null };
+        }),
+
       vaciar: () => set({ lineas: [], claveEnvio: null }),
 
       prepararEnvio: () => {
@@ -118,81 +118,56 @@ export const usarCarrito = create<EstadoCarrito>()(
       },
     }),
     {
-      name: "anaya-carrito",
-      // v3: desapareció el código de 4 dígitos y apareció la clave de
-      // envío. A diferencia de la v2, esta migración CONSERVA las líneas:
-      // el formato no cambió y tirar la bolsa de alguien que llevaba
-      // media hora armándola sería peor que cualquier incompatibilidad.
+      name: CLAVE_CARRITO,
+      // v3 conserva las líneas de la v2: el formato no cambió y tirar una
+      // bolsa armada durante media hora es peor que cualquier incompatibilidad.
       version: 3,
-      migrate: (guardado, version) => {
-        const previo = (guardado ?? {}) as { lineas?: LineaCarrito[] };
-        const lineas = version >= 2 && Array.isArray(previo.lineas) ? previo.lineas : [];
-        return { lineas, claveEnvio: null } as unknown as EstadoCarrito;
+      migrate: (guardado, version): Guardado => {
+        const previo = guardado as Partial<Guardado> | null;
+        const lineas = version >= 2 && Array.isArray(previo?.lineas) ? previo.lineas : [];
+        return { lineas, claveEnvio: null };
       },
-      partialize: (estado) =>
-        ({ lineas: estado.lineas, claveEnvio: estado.claveEnvio }) as unknown as EstadoCarrito,
-      storage: createJSONStorage(() => localStorage),
+      partialize: (estado): Guardado => ({ lineas: estado.lineas, claveEnvio: estado.claveEnvio }),
+      storage: createJSONStorage<Guardado>(() => localStorage),
     }
   )
 );
 
-export function totalUnidades(estado: { lineas: LineaCarrito[] }): number {
-  return estado.lineas.reduce((suma, l) => suma + l.cantidad, 0);
+export function totalUnidades(e: { lineas: LineaCarrito[] }): number {
+  return e.lineas.reduce((suma, l) => suma + l.cantidad, 0);
 }
 
-/** Cuántas unidades de un producto hay en el carrito, sumando todos sus tonos. */
-export function unidadesDeProducto(
-  lineas: LineaCarrito[],
-  productoId: string
-): number {
-  return lineas
+/** Unidades de un producto sumando sus variantes, que comparten inventario. */
+export function unidadesDeProducto(e: { lineas: LineaCarrito[] }, productoId: string): number {
+  return e.lineas
     .filter((l) => l.productoId === productoId)
     .reduce((suma, l) => suma + l.cantidad, 0);
 }
 
+// Suscripciones finas: cada tarjeta se entera solo de lo suyo. `useShallow`
+// compara línea por línea y las acciones conservan la identidad de las que
+// no tocan, así que cambiar un producto no vuelve a pintar los demás.
+
+export function useLineasDeProducto(productoId: string): LineaCarrito[] {
+  return useCarrito(useShallow((e) => e.lineas.filter((l) => l.productoId === productoId)));
+}
+
+export function useUnidadesDeProducto(productoId: string): number {
+  return useCarrito((e) => unidadesDeProducto(e, productoId));
+}
+
+export function useTotalUnidades(): number {
+  return useCarrito(totalUnidades);
+}
+
 /**
- * Las líneas de un solo producto.
- *
- * Existe para que las tarjetas del catálogo no tengan que suscribirse al
- * carrito entero: con 591 tarjetas en pantalla, cada toque en un "+"
- * volvía a renderizar las 591. Ver `usarLineasDeProducto`.
+ * El persist de zustand no escucha otras pestañas: sin esto, la pestaña que
+ * se abrió desde WhatsApp pisa la bolsa de la otra en su siguiente cambio.
  */
-export function lineasDeProducto(
-  lineas: LineaCarrito[],
-  productoId: string
-): LineaCarrito[] {
-  return lineas.filter((l) => l.productoId === productoId);
-}
-
-/* =====================================================================
-   Suscripciones finas
-   =====================================================================
-
-   El catálogo llegó a pintar 591 tarjetas a la vez, y cada una hacía
-   `usarCarrito((e) => e.lineas)`: cualquier toque en un "+" cambiaba la
-   lista y React volvía a renderizar LAS 591. Ése era el origen de "se
-   traba" — no la red, ni la base: el propio navegador.
-
-   Estos dos ayudantes hacen que cada tarjeta se entere solo de lo suyo.
-   `useShallow` compara elemento por elemento, y como `agregar` y
-   `establecer` conservan la identidad de las líneas que no tocan, la
-   tarjeta de un producto ni se despeina cuando cambia otro.
-   ===================================================================== */
-
-/** Las líneas de UN producto. Estable mientras ese producto no cambie. */
-export function usarLineasDeProducto(productoId: string): LineaCarrito[] {
-  return usarCarrito(
-    useShallow((estado) => estado.lineas.filter((l) => l.productoId === productoId))
-  );
-}
-
-/** Unidades de UN producto, sumando sus tonos. Devuelve un número: la
- *  comparación por identidad de React ya basta para no re-renderizar. */
-export function usarUnidadesDeProducto(productoId: string): number {
-  return usarCarrito((estado) => unidadesDeProducto(estado.lineas, productoId));
-}
-
-/** Total de unidades en la bolsa. */
-export function usarTotalUnidades(): number {
-  return usarCarrito((estado) => totalUnidades(estado));
+export function escucharOtrasPestanas(): () => void {
+  const alCambiar = (e: StorageEvent) => {
+    if (e.key === CLAVE_CARRITO) void useCarrito.persist.rehydrate();
+  };
+  window.addEventListener("storage", alCambiar);
+  return () => window.removeEventListener("storage", alCambiar);
 }
