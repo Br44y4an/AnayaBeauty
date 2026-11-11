@@ -1,31 +1,23 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { BotonEnlace } from "@/components/ui/Boton";
+import { Marca } from "@/components/ui/Marca";
 
-export const metadata = { title: "No encontramos esta página — Anaya Beauty" };
+export const metadata: Metadata = { title: "No encontramos esta página" };
 
+/** 404 de cualquier dirección que no existe (el de la ficha dice que el producto ya no está disponible). */
 export default function NoEncontrado() {
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center gap-5 px-4 text-center">
-      <span className="flex h-20 w-20 items-center justify-center rounded-full bg-lila-suave/50 text-4xl">
-        💄
-      </span>
-
-      <h1 className="font-display text-3xl text-carbon">
-        Este producto ya no está
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center px-4 py-10 text-center">
+      <Marca />
+      <h1 className="mt-8 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-tinta">
+        No encontramos esta página
       </h1>
-
-      <p className="text-carbon-suave">
-        Puede que lo hayamos agotado o que el enlace esté viejo. Mira el
-        catálogo completo: seguro hay algo que te encanta.
+      <p className="mt-2 text-base text-tinta-suave">
+        El enlace puede estar incompleto o el producto ya no está en el catálogo.
       </p>
-
-      <Link
-        href="/"
-        className="min-h-[52px] w-full cursor-pointer rounded-pastilla bg-fucsia
-                   px-6 py-3.5 text-lg font-semibold text-petalo shadow-petalo
-                   transition duration-200 hover:brightness-110"
-      >
+      <BotonEnlace href="/" ancho className="mt-8">
         Ver el catálogo
-      </Link>
+      </BotonEnlace>
     </main>
   );
 }

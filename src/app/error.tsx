@@ -1,71 +1,46 @@
 "use client";
 
 import { useEffect } from "react";
+import { Boton } from "@/components/ui/Boton";
+import { IconoWhatsApp } from "@/components/ui/Iconos";
+import { Marca } from "@/components/ui/Marca";
 import { enlaceWhatsApp } from "@/lib/whatsapp";
 
-/**
- * Red de seguridad de toda la web pública.
- *
- * Sin este archivo cualquier fallo del servidor (una consulta que
- * revienta, Supabase caído) dejaba una pantalla en blanco con el texto
- * "Minified React error #441" — la clienta no entendía nada y se perdía
- * la venta. Aquí siempre hay un mensaje claro, un botón para reintentar
- * sin recargar, y una salida por WhatsApp.
- */
-export default function ErrorGlobal({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+/** Red de seguridad de la web: reintenta sin recargar, recarga o lleva a WhatsApp. La bolsa no se pierde. */
+export default function ErrorTienda({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
     console.error("[web] error no controlado:", error);
   }, [error]);
 
+  const codigo = error.digest ? ` (código ${error.digest})` : "";
+
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center gap-5 px-4 text-center">
-      <span className="flex h-20 w-20 items-center justify-center rounded-full bg-fucsia-suave/40 text-4xl">
-        🌸
-      </span>
+    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center px-4 py-10 text-center">
+      <Marca />
+      <h1 className="mt-8 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-tinta">Algo no cargó bien</h1>
+      <p className="mt-2 text-base text-tinta-suave">Lo que tienes en tu bolsa sigue guardado.</p>
 
-      <h1 className="font-display text-3xl text-carbon">Algo se nos enredó</h1>
-
-      <p className="text-carbon-suave">
-        No pudimos cargar esta pantalla. Tu pedido sigue guardado en tu bolsa:
-        no perdiste nada.
-      </p>
-
-      <button
-        onClick={reset}
-        className="min-h-[52px] w-full cursor-pointer rounded-pastilla bg-fucsia px-6
-                   text-lg font-semibold text-petalo shadow-petalo transition
-                   duration-200 hover:brightness-110 active:scale-[0.98]"
-      >
-        Intentar de nuevo
-      </button>
+      <div className="mt-8 flex w-full flex-col gap-3">
+        <Boton type="button" ancho onClick={() => retry()}>
+          Volver a intentar
+        </Boton>
+        <Boton type="button" variante="secundario" ancho onClick={() => window.location.reload()}>
+          Recargar la página
+        </Boton>
+      </div>
 
       <a
-        href="/"
-        className="min-h-[52px] w-full cursor-pointer rounded-pastilla border-2
-                   border-fucsia-suave px-6 py-3.5 text-lg font-semibold
-                   text-fucsia-texto transition duration-200 hover:border-fucsia"
-      >
-        Volver al catálogo
-      </a>
-
-      <a
-        href={enlaceWhatsApp("Hola, la página me mostró un error 🥲")}
+        href={enlaceWhatsApp(`Hola, el catálogo me mostró un error${codigo}.`)}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-sm font-semibold text-carbon-suave underline
-                   underline-offset-4 transition hover:text-fucsia-texto"
+        className="mt-5 inline-flex min-h-11 items-center gap-2 text-[15px] font-semibold text-tinta underline underline-offset-4"
       >
-        Escribirnos por WhatsApp
+        <IconoWhatsApp tamano={20} />
+        Escríbenos por WhatsApp
       </a>
 
       {error.digest && (
-        <p className="text-xs text-carbon-suave">Referencia: {error.digest}</p>
+        <p className="mt-6 text-[13px] leading-[18px] text-tinta-suave">Código del error: {error.digest}</p>
       )}
     </main>
   );
