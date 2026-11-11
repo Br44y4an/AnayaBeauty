@@ -1,162 +1,204 @@
-/**
- * Iconos SVG de la interfaz.
- *
- * Los emojis se usan solo como adorno en los textos de la marca
- * (✨ ♡ 💕); todo icono funcional es SVG, porque los emojis cambian de
- * forma según el dispositivo y los lectores de pantalla los leen en voz alta.
- */
+import type { ReactNode, SVGProps } from "react";
 
-type Props = { className?: string };
+/** Iconos de línea propios: cuadrícula de 24, trazo 1,75, puntas redondas, `currentColor`. */
+export type PropsIcono = SVGProps<SVGSVGElement> & { tamano?: number };
 
-const base = "h-5 w-5";
-
-export function IconoBuscar({ className = base }: Props) {
+function Icono({ tamano = 24, children, ...props }: PropsIcono & { children: ReactNode }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
+    <svg
+      width={tamano}
+      height={tamano}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      {children}
     </svg>
   );
 }
 
-export function IconoBolsa({ className = base }: Props) {
+export function IconoBuscar(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 8h14l-1 12H6L5 8Z" />
-      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
-    </svg>
+    <Icono {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.4-4.4" />
+    </Icono>
   );
 }
 
-export function IconoMas({ className = base }: Props) {
+export function IconoBolsa(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+    <Icono {...props}>
+      <path d="M4.75 8.25h14.5l-1.1 11.6a1.25 1.25 0 0 1-1.24 1.15H7.09a1.25 1.25 0 0 1-1.24-1.15L4.75 8.25Z" />
+      <path d="M8.75 10.5V7a3.25 3.25 0 0 1 6.5 0v3.5" />
+    </Icono>
+  );
+}
+
+export function IconoCerrar(props: PropsIcono) {
+  return (
+    <Icono {...props}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </Icono>
+  );
+}
+
+export function IconoAtras(props: PropsIcono) {
+  return (
+    <Icono {...props}>
+      <path d="M19 12H5" />
+      <path d="m11 18-6-6 6-6" />
+    </Icono>
+  );
+}
+
+const CHEVRONES = {
+  abajo: "m6 9 6 6 6-6",
+  arriba: "m6 15 6-6 6 6",
+  izquierda: "m15 6-6 6 6 6",
+  derecha: "m9 6 6 6-6 6",
+} as const;
+
+export function IconoChevron({
+  direccion = "abajo",
+  ...props
+}: PropsIcono & { direccion?: keyof typeof CHEVRONES }) {
+  return (
+    <Icono {...props}>
+      <path d={CHEVRONES[direccion]} />
+    </Icono>
+  );
+}
+
+export function IconoMas(props: PropsIcono) {
+  return (
+    <Icono {...props}>
       <path d="M12 5v14M5 12h14" />
-    </svg>
+    </Icono>
   );
 }
 
-export function IconoMenos({ className = base }: Props) {
+export function IconoMenos(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+    <Icono {...props}>
       <path d="M5 12h14" />
-    </svg>
+    </Icono>
   );
 }
 
-export function IconoFlechaIzquierda({ className = base }: Props) {
+export function IconoEliminar(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m15 18-6-6 6-6" />
-    </svg>
+    <Icono {...props}>
+      <path d="M4 7h16" />
+      <path d="M9.5 7V4.75a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75V7" />
+      <path d="m6 7 .9 12.1a2 2 0 0 0 2 1.9h6.2a2 2 0 0 0 2-1.9L18 7" />
+      <path d="M10 11v6M14 11v6" />
+    </Icono>
   );
 }
 
-export function IconoCorazon({ className = base }: Props) {
+export function IconoCheck(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 21s-7.5-4.9-9.3-9A5.2 5.2 0 0 1 12 6.6 5.2 5.2 0 0 1 21.3 12c-1.8 4.1-9.3 9-9.3 9Z" />
-    </svg>
+    <Icono {...props}>
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </Icono>
   );
 }
 
-export function IconoWhatsApp({ className = base }: Props) {
+export function IconoCopiar(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2a10 10 0 0 0-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1 0 12 2Zm5.8 14.2c-.2.7-1.2 1.3-2 1.4-.5.1-1.2.2-3.5-.7-2.9-1.2-4.8-4.2-5-4.4-.1-.2-1.1-1.5-1.1-2.9s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .5l-.4.6-.3.3c-.1.1-.2.3 0 .5.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.2.1.4.1.5-.1l.8-.9c.2-.2.3-.2.6-.1l2 1c.3.1.4.2.5.3.1.2.1.6-.1 1.1Z" />
-    </svg>
+    <Icono {...props}>
+      <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" />
+      <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+    </Icono>
   );
 }
 
-export function IconoCheck({ className = base }: Props) {
+export function IconoCompartir(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m5 13 4 4L19 7" />
-    </svg>
+    <Icono {...props}>
+      <path d="M12 3.5v11" />
+      <path d="m7.75 7.75 4.25-4.25 4.25 4.25" />
+      <path d="M8.5 11H6.5A1.5 1.5 0 0 0 5 12.5v6A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-6a1.5 1.5 0 0 0-1.5-1.5h-2" />
+    </Icono>
   );
 }
 
-export function IconoLupa({ className = base }: Props) {
+export function IconoAlerta(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5M11 8v6M8 11h6" />
-    </svg>
+    <Icono {...props}>
+      <path d="M10.27 4.9 3.1 17.4a2 2 0 0 0 1.73 3h14.34a2 2 0 0 0 1.73-3L13.73 4.9a2 2 0 0 0-3.46 0Z" />
+      <path d="M12 9.5v4" />
+      <path d="M12 17h.01" />
+    </Icono>
   );
 }
 
-export function IconoBasura({ className = base }: Props) {
+export function IconoInfo(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 7h16M10 4h4M9 7v11M15 7v11" />
-      <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
-    </svg>
+    <Icono {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5" />
+      <path d="M12 7.75h.01" />
+    </Icono>
   );
 }
 
-export function IconoCerrar({ className = base }: Props) {
+/** Glifo de la marca WhatsApp: el único icono relleno del set. */
+export function IconoWhatsApp(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" />
-    </svg>
+    <Icono fill="currentColor" stroke="none" {...props}>
+      <path
+        transform="translate(1.5 1.5) scale(0.875)"
+        d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"
+      />
+    </Icono>
   );
 }
 
-export function IconoPaleta({ className = base }: Props) {
+// Alias temporales de la v4: los usan pantallas que se reescriben en esta versión; la integración los borra.
+export const IconoFlechaIzquierda = (props: PropsIcono) => <IconoChevron direccion="izquierda" {...props} />;
+export const IconoFlechaAbajo = (props: PropsIcono) => <IconoChevron direccion="abajo" {...props} />;
+export const IconoBasura = IconoEliminar;
+export const IconoLupa = IconoBuscar;
+
+export function IconoCorazon(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 3a9 9 0 1 0 0 18c1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.1 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.3-9-7.3Z" />
-      <circle cx="7.5" cy="11.5" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="10.5" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none" />
-    </svg>
+    <Icono {...props}>
+      <path d="M12 20s-7-4.4-8.6-8.3A4.8 4.8 0 0 1 12 7.1a4.8 4.8 0 0 1 8.6 4.6C19 15.6 12 20 12 20Z" />
+    </Icono>
   );
 }
 
-export function IconoAlerta({ className = base }: Props) {
+export function IconoPaleta(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 4.5 2.8 20h18.4L12 4.5Z" />
-      <path d="M12 10v4M12 17.2v.1" />
-    </svg>
+    <Icono {...props}>
+      <path d="M12 3.5a8.5 8.5 0 1 0 0 17c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.5-.7-.5-1.1 0-.9.7-1.6 1.6-1.6h1.9a4.6 4.6 0 0 0 4.6-4.6c0-3.8-3.8-7-8.8-7Z" />
+      <circle cx="7.75" cy="11.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="10.5" cy="7.75" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15.25" cy="8.5" r="1" fill="currentColor" stroke="none" />
+    </Icono>
   );
 }
 
-export function IconoFlechaAbajo({ className = base }: Props) {
+export function IconoEtiqueta(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 5v14M6 13l6 6 6-6" />
-    </svg>
+    <Icono {...props}>
+      <path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5-8.5-8.5Z" />
+      <circle cx="8" cy="8" r="1.25" />
+    </Icono>
   );
 }
 
-export function IconoEtiqueta({ className = base }: Props) {
+export function IconoLapiz(props: PropsIcono) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 12V4h8l9 9-8 8-9-9Z" />
-      <circle cx="7.5" cy="7.5" r="1.3" />
-    </svg>
-  );
-}
-
-export function IconoLapiz({ className = base }: Props) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
-    </svg>
+    <Icono {...props}>
+      <path d="M4 20h4L19.3 8.7a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+    </Icono>
   );
 }

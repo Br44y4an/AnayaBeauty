@@ -1,32 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { contraste, luminancia, cumpleAA, AA_NORMAL } from "@/lib/color";
+import { contraste, luminancia, AA_NORMAL } from "@/lib/color";
 
-/**
- * Vigilancia de la paleta.
- *
- * Esta prueba NO usa constantes copiadas a mano: lee `globals.css` y
- * comprueba los colores que la web está usando de verdad. Si alguien
- * "aviva" el rosa de la marca para que se vea más bonito, la prueba se
- * cae y dice exactamente cuánto contraste perdió.
- *
- * Hace falta porque el fallo era invisible desde el código: el rosa
- * original (#e5308a) se veía precioso en la pantalla del que lo eligió y
- * quedaba en 4.10:1 — por debajo del 4.5:1 de WCAG AA — tanto como texto
- * sobre blanco como con texto blanco encima, que es como está el botón
- * principal de toda la tienda.
- */
+// Lee los tokens reales de globals.css: si alguien aviva un color, la prueba dice cuánto contraste perdió.
 const css = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
 
 function token(nombre: string): string {
-  const encontrado = css.match(new RegExp(`--color-${nombre}:\\s*(#[0-9a-fA-F]{3,8})`));
+  const encontrado = css.match(new RegExp(`--color-${nombre}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`));
   if (!encontrado) throw new Error(`No existe el token --color-${nombre} en globals.css`);
   return encontrado[1];
 }
 
-const PETALO = () => token("petalo");
-const ROSA_NUBE = () => token("rosa-nube");
+function exigir(texto: string, fondo: string, minimo: number) {
+  const razon = contraste(token(texto), token(fondo));
+  expect(
+    razon,
+    `--color-${texto} sobre --color-${fondo} da ${razon.toFixed(2)}:1, hace falta ${minimo}:1`
+  ).toBeGreaterThanOrEqual(minimo);
+}
 
 describe("color · utilidades", () => {
   it("calcula la luminancia de los extremos", () => {
@@ -52,63 +44,52 @@ describe("color · utilidades", () => {
   });
 });
 
-describe("paleta de la marca · texto sobre fondo claro", () => {
-  const casos: [string, () => string][] = [
-    ["fucsia-texto", PETALO],
-    ["fucsia-texto", ROSA_NUBE],
-    ["lila-texto", PETALO],
-    ["lila-texto", ROSA_NUBE],
-    ["carbon", ROSA_NUBE],
-    ["carbon-suave", PETALO],
-    ["carbon-suave", ROSA_NUBE],
+describe("paleta v5 · texto (AA, 4,5:1)", () => {
+  const casos: [texto: string, fondo: string][] = [
+    ["tinta", "fondo"],
+    ["tinta-suave", "fondo"],
+    ["tinta-suave", "superficie"],
+    ["tinta-suave", "inactivo"],
+    ["firma", "fondo"],
+    ["firma", "superficie"],
+    ["acento", "fondo"],
+    ["ahorro", "fondo"],
+    ["ahorro", "ahorro-fondo"],
+    ["alerta", "alerta-fondo"],
+    ["error", "error-fondo"],
   ];
 
-  for (const [nombreTexto, fondo] of casos) {
-    it(`${nombreTexto} sobre ${fondo() === "#ffffff" ? "blanco" : "rosa-nube"} cumple AA`, () => {
-      const razon = contraste(token(nombreTexto), fondo());
-      expect(
-        razon,
-        `--color-${nombreTexto} da ${razon.toFixed(2)}:1, hace falta ${AA_NORMAL}:1`
-      ).toBeGreaterThanOrEqual(AA_NORMAL);
-    });
+  for (const [texto, fondo] of casos) {
+    it(`${texto} sobre ${fondo}`, () => exigir(texto, fondo, AA_NORMAL));
+  }
+
+  it("el fondo es blanco: es el color del texto de los botones primarios", () => {
+    expect(token("fondo").toLowerCase()).toBe("#ffffff");
+  });
+
+  for (const relleno of ["acento", "acento-hondo"]) {
+    it(`blanco sobre ${relleno} (botón primario, normal y presionado)`, () =>
+      exigir("fondo", relleno, AA_NORMAL));
   }
 });
 
-describe("paleta de la marca · texto blanco sobre color", () => {
-  /**
-   * Los fondos de los botones e insignias. Éste es el caso que estaba
-   * roto y el más caro: "Agregar" y "Confirmar" son los dos botones de
-   * los que vive la tienda.
-   */
-  for (const fondo of ["fucsia", "lila", "exito", "alerta"]) {
-    it(`el texto blanco sobre ${fondo} cumple AA`, () => {
-      const razon = contraste(PETALO(), token(fondo));
-      expect(
-        razon,
-        `blanco sobre --color-${fondo} da ${razon.toFixed(2)}:1, hace falta ${AA_NORMAL}:1`
-      ).toBeGreaterThanOrEqual(AA_NORMAL);
-    });
+describe("paleta v5 · bordes de controles (WCAG 1.4.11, 3:1)", () => {
+  for (const fondo of ["fondo", "superficie"]) {
+    it(`borde sobre ${fondo}`, () => exigir("borde", fondo, 3));
   }
 });
 
-describe("paleta de la marca · avisos", () => {
-  it("el aviso de alerta se lee sobre su propio fondo", () => {
-    expect(cumpleAA(token("alerta"), token("alerta-fondo"))).toBe(true);
-  });
-
-  it("el aviso de éxito se lee sobre su propio fondo", () => {
-    expect(cumpleAA(token("exito"), token("exito-fondo"))).toBe(true);
-  });
-});
-
-describe("paleta de la marca · regresión concreta", () => {
-  it("no vuelve a los valores que fallaban", () => {
-    // Los originales, para dejar constancia de por qué cambiaron.
+describe("paleta v5 · regresión", () => {
+  it("ningún token vuelve a los colores de la marca que no se leían", () => {
+    // #e5308a con blanco da 4,10:1 y #a97fd0 da 3,17:1: no sirven para texto ni para botones.
     expect(contraste("#e5308a", "#ffffff")).toBeLessThan(AA_NORMAL);
     expect(contraste("#a97fd0", "#ffffff")).toBeLessThan(AA_NORMAL);
 
-    expect(token("fucsia-texto").toLowerCase()).not.toBe("#e5308a");
-    expect(token("lila-texto").toLowerCase()).not.toBe("#a97fd0");
-    expect(token("fucsia").toLowerCase()).not.toBe("#e5308a");
+    const valores = [...css.matchAll(/--color-[a-z-]+:\s*(#[0-9a-fA-F]{3,8})/g)].map((m) =>
+      m[1].toLowerCase()
+    );
+    expect(valores.length).toBeGreaterThan(10);
+    expect(valores).not.toContain("#e5308a");
+    expect(valores).not.toContain("#a97fd0");
   });
 });

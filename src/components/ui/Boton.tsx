@@ -1,54 +1,60 @@
-import type { ButtonHTMLAttributes } from "react";
+import Link from "next/link";
+import type { ButtonHTMLAttributes, ComponentProps } from "react";
+import { Giro } from "@/components/ui/Giro";
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variante?: "primario" | "secundario" | "fantasma" | "peligro";
-  tamano?: "normal" | "grande";
-  ancho?: boolean;
-  /**
-   * Muestra el giro y bloquea el botón.
-   *
-   * Es lo que evita el doble envío y la sensación de "se trabó": un botón
-   * que no responde y no dice nada hace que la clienta lo pulse otra vez.
-   * `aria-busy` cuenta lo mismo a los lectores de pantalla.
-   */
-  cargando?: boolean;
+export type VarianteBoton = "primario" | "secundario" | "contorno" | "fantasma" | "peligro";
+export type TamanoBoton = "compacto" | "normal" | "grande";
+
+type Apariencia = { variante?: VarianteBoton; tamano?: TamanoBoton; ancho?: boolean };
+
+const VARIANTES: Record<VarianteBoton, string> = {
+  primario: "bg-acento text-fondo hover:bg-acento-hondo active:bg-acento-hondo",
+  secundario: "border border-tinta bg-fondo text-tinta hover:bg-superficie active:bg-superficie",
+  contorno: "border border-borde bg-fondo text-tinta hover:border-tinta active:bg-superficie",
+  fantasma: "text-tinta hover:bg-superficie active:bg-superficie",
+  peligro: "border border-error bg-fondo text-error hover:bg-error-fondo active:bg-error-fondo",
 };
 
-const estilos = {
-  primario:
-    "bg-fucsia text-petalo shadow-petalo hover:brightness-110 active:scale-[0.98]",
-  secundario:
-    "bg-petalo text-fucsia-texto border-2 border-fucsia-suave hover:border-fucsia active:scale-[0.98]",
-  fantasma: "bg-transparent text-carbon-suave hover:text-fucsia-texto underline-offset-4",
-  peligro: "bg-petalo text-carbon-suave border-2 border-lila-suave hover:border-carbon-suave",
+const TAMANOS: Record<TamanoBoton, string> = {
+  compacto: "min-h-11 px-4 text-[15px]",
+  normal: "min-h-13 px-5 text-base",
+  grande: "min-h-14 px-6 text-[17px]",
 };
 
-const tamanos = {
-  // 52px: por encima del mínimo de 44px que exige tocar con el pulgar, y
-  // con holgura para quien tiene menos pulso o la pantalla pequeña.
-  normal: "min-h-[52px] px-6 py-3 text-base",
-  grande: "min-h-[60px] px-8 py-4 text-lg",
-};
+// Inactivo legible (fondo inactivo, texto tinta-suave), salvo mientras carga: ahí conserva su color.
+const BASE =
+  "inline-flex cursor-pointer select-none items-center justify-center gap-2 rounded-md text-center " +
+  "font-semibold leading-5 transition-colors duration-150 ease-entrada " +
+  "disabled:cursor-not-allowed disabled:not-aria-busy:border-transparent " +
+  "disabled:not-aria-busy:bg-inactivo disabled:not-aria-busy:text-tinta-suave aria-busy:cursor-wait";
 
-export function Boton({
+export function estilosBoton({
   variante = "primario",
   tamano = "normal",
+  ancho = false,
+  className = "",
+}: Apariencia & { className?: string } = {}): string {
+  return [BASE, VARIANTES[variante], TAMANOS[tamano], ancho ? "w-full" : "", className]
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function Boton({
+  variante,
+  tamano,
   ancho,
   cargando = false,
-  className = "",
+  className,
   children,
   disabled,
   ...props
-}: Props) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & Apariencia & { cargando?: boolean }) {
   return (
     <button
       {...props}
       disabled={disabled || cargando}
       aria-busy={cargando || undefined}
-      className={`inline-flex cursor-pointer items-center justify-center gap-2
-        rounded-pastilla font-semibold transition duration-200
-        disabled:pointer-events-none disabled:opacity-45
-        ${estilos[variante]} ${tamanos[tamano]} ${ancho ? "w-full" : ""} ${className}`}
+      className={estilosBoton({ variante, tamano, ancho, className })}
     >
       {cargando && <Giro />}
       {children}
@@ -56,21 +62,13 @@ export function Boton({
   );
 }
 
-function Giro() {
-  return (
-    <svg
-      className="h-5 w-5 animate-spin"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
-      <path
-        d="M21 12a9 9 0 0 0-9-9"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+/** Enlace con aspecto de botón: nunca un <button> dentro de un <a>. */
+export function BotonEnlace({
+  variante,
+  tamano,
+  ancho,
+  className,
+  ...props
+}: ComponentProps<typeof Link> & Apariencia) {
+  return <Link {...props} className={estilosBoton({ variante, tamano, ancho, className })} />;
 }

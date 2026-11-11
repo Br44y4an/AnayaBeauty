@@ -1,108 +1,232 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useEffect, useEffectEvent, useRef, useState, type PointerEvent, type RefObject } from "react";
+import { estilosBoton } from "@/components/ui/Boton";
 import { Esqueleto } from "@/components/ui/Esqueleto";
-import { IconoCorazon } from "@/components/ui/Iconos";
+import { atraparTabulador } from "@/components/ui/Hoja";
+import { IconoCerrar, IconoMas, IconoMenos } from "@/components/ui/Iconos";
+import { useBloquearScroll } from "@/hooks/useBloquearScroll";
+import { usePresencia } from "@/hooks/usePresencia";
 
-/**
- * Visor de imagen a pantalla completa.
- *
- * Se cierra con Escape, con el botón, o tocando el fondo. Mientras está
- * abierto bloquea el desplazamiento de la página detrás, para que en
- * celular el pellizco haga zoom sobre la imagen y no mueva el catálogo.
- *
- * "Tocar fuera" cierra comparando contra el elemento real: antes el
- * `stopPropagation` vivía en un div del tamaño de toda la pantalla
- * (`fill` + `object-contain`), y ese div —no la foto— era quien recibía
- * el toque en el espacio vacío alrededor de una imagen que no llena el
- * recuadro. En un iPhone, donde ese recuadro invisible ocupa casi toda
- * la pantalla, "tocar fuera" casi nunca encontraba fondo real. Ahora la
- * imagen se dimensiona a su tamaño real (sin `fill`) y el
- * `stopPropagation` vive en ella misma, así que todo lo que no son sus
- * píxeles visibles sí es fondo y cierra.
- */
-export function VisorImagen({
-  src,
-  alt,
-  alCerrar,
-}: {
-  src: string;
-  alt: string;
-  alCerrar: () => void;
-}) {
-  const [estado, setEstado] = useState<"cargando" | "lista" | "error">("cargando");
+type Props = { src: string; alt: string; abierto?: boolean; alCerrar: () => void };
+
+/** Foto a pantalla completa: doble toque o pellizco hasta 2×, «Ampliar» para teclado, Escape y foco en Cerrar. */
+export function VisorImagen({ src, alt, abierto = true, alCerrar }: Props) {
+  const { montada, saliendo } = usePresencia(abierto);
+  const capa = useRef<HTMLDivElement>(null);
+  const cerrarBoton = useRef<HTMLButtonElement>(null);
+  useBloquearScroll(montada);
+
+  // Escucha en captura y corta la propagación: Escape cierra solo el visor, no la hoja o el modal de debajo.
+  const alPulsar = useEffectEvent((evento: KeyboardEvent) => {
+    if (evento.key === "Escape") {
+      evento.preventDefault();
+      evento.stopPropagation();
+      alCerrar();
+    } else if (evento.key === "Tab" && capa.current) {
+      evento.stopPropagation();
+      atraparTabulador(evento, capa.current);
+    }
+  });
 
   useEffect(() => {
-    const alPulsar = (e: KeyboardEvent) => {
-      if (e.key === "Escape") alCerrar();
-    };
-
-    document.addEventListener("keydown", alPulsar);
-
-    const desbordeOriginal = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
+    if (!abierto) return;
+    const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cerrarBoton.current?.focus({ preventScroll: true });
+    const oyente = (evento: KeyboardEvent) => alPulsar(evento);
+    window.addEventListener("keydown", oyente, true);
     return () => {
-      document.removeEventListener("keydown", alPulsar);
-      document.body.style.overflow = desbordeOriginal;
+      window.removeEventListener("keydown", oyente, true);
+      if (previo?.isConnected) previo.focus({ preventScroll: true });
     };
-  }, [alCerrar]);
+  }, [abierto]);
+
+  if (!montada) return null;
+  const cerrar = saliendo ? () => {} : alCerrar;
 
   return (
     <div
+      ref={capa}
       role="dialog"
       aria-modal="true"
       aria-label={alt}
-      onClick={alCerrar}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-carbon/90 p-4
-                 animate-[aparecer_0.2s_ease]"
+      className={`fixed inset-0 z-[60] bg-tinta/95 ${saliendo ? "animate-desaparecer" : "animate-aparecer"}`}
     >
+      <Escena key={src} src={src} alt={alt} alTocarFondo={cerrar} />
       <button
+        ref={cerrarBoton}
         type="button"
-        onClick={alCerrar}
-        aria-label="Cerrar la imagen"
-        className="absolute right-4 top-4 flex h-11 w-11 cursor-pointer items-center
-                   justify-center rounded-full bg-petalo/95 text-2xl leading-none
-                   text-carbon shadow-flotante transition hover:bg-petalo
-                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fucsia"
+        onClick={cerrar}
+        aria-label="Cerrar"
+        className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] flex size-11 cursor-pointer
+                   items-center justify-center rounded-full bg-fondo text-tinta"
       >
-        ×
+        <IconoCerrar tamano={22} />
       </button>
-
-      {/* Reserva el espacio y avisa "ya casi" — una pantalla en blanco
-          mientras carga se lee como que el visor se trabó. */}
-      {estado === "cargando" && (
-        <Esqueleto
-          className="absolute left-1/2 top-1/2 aspect-square w-[70vw] max-w-sm
-                     -translate-x-1/2 -translate-y-1/2"
-        />
-      )}
-
-      {estado === "error" ? (
-        <div className="flex flex-col items-center gap-2 text-petalo/80">
-          <IconoCorazon className="h-16 w-16" />
-          <p className="text-sm">No se pudo cargar la imagen.</p>
-        </div>
-      ) : (
-        <Image
-          src={src}
-          alt={alt}
-          width={1200}
-          height={1200}
-          sizes="(max-width: 768px) 100vw, 768px"
-          preload
-          onClick={(e) => e.stopPropagation()}
-          onLoad={() => setEstado("lista")}
-          onError={() => setEstado("error")}
-          className={`h-auto max-h-[85vh] w-auto max-w-full transition-opacity duration-200
-                      ${estado === "lista" ? "opacity-100" : "opacity-0"}`}
-        />
-      )}
-
-      <p className="absolute bottom-6 left-0 right-0 text-center text-sm text-petalo/80">
-        Toca fuera de la imagen para cerrar
-      </p>
     </div>
   );
+}
+
+function Escena({ src, alt, alTocarFondo }: { src: string; alt: string; alTocarFondo: () => void }) {
+  const [estado, setEstado] = useState<"cargando" | "lista" | "error">("cargando");
+  const escenario = useRef<HTMLDivElement>(null);
+  const imagen = useRef<HTMLImageElement>(null);
+  const zoom = useZoom(escenario, imagen, alTocarFondo);
+  const { escala, x, y } = zoom.vista;
+
+  return (
+    <>
+      <div
+        ref={escenario}
+        {...zoom.manejadores}
+        className="absolute inset-0 flex touch-none select-none items-center justify-center overflow-hidden px-4 py-16"
+      >
+        {estado === "cargando" && <Esqueleto className="absolute aspect-square w-[min(70vw,24rem)]" />}
+        {estado === "error" ? (
+          <p className="text-base text-fondo">No pudimos cargar la imagen.</p>
+        ) : (
+          <Image
+            ref={imagen}
+            src={src}
+            alt={alt}
+            width={1200}
+            height={1200}
+            sizes="100vw"
+            loading="eager"
+            draggable={false}
+            onLoad={() => setEstado("lista")}
+            onError={() => setEstado("error")}
+            style={{ transform: `translate(${x}px, ${y}px) scale(${escala})` }}
+            className={`h-auto max-h-full w-auto max-w-full ${zoom.enGesto ? "" : "transition duration-200 ease-entrada"} ${
+              estado === "lista" ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        )}
+      </div>
+      {estado === "lista" && (
+        <button
+          type="button"
+          onClick={() => zoom.alternar()}
+          className={estilosBoton({
+            variante: "secundario",
+            tamano: "compacto",
+            className: "absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2",
+          })}
+        >
+          {escala > 1 ? <IconoMenos tamano={20} /> : <IconoMas tamano={20} />}
+          {escala > 1 ? "Reducir" : "Ampliar"}
+        </button>
+      )}
+    </>
+  );
+}
+
+type Punto = { x: number; y: number };
+type Vista = { escala: number } & Punto;
+const SIN_ZOOM: Vista = { escala: 1, x: 0, y: 0 };
+const ZOOM_MAX = 2;
+const DOBLE_TOQUE_MS = 300;
+
+const distancia = (a: Punto, b: Punto) => Math.hypot(a.x - b.x, a.y - b.y);
+const medio = (a: Punto, b: Punto) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+/** Pellizco, arrastre y doble toque con Pointer Events. Las posiciones van relativas al centro del escenario. */
+function useZoom(
+  escenario: RefObject<HTMLDivElement | null>,
+  imagen: RefObject<HTMLImageElement | null>,
+  alTocarFondo: () => void
+) {
+  const [vista, setVista] = useState(SIN_ZOOM);
+  const [enGesto, setEnGesto] = useState(false);
+  const actual = useRef(SIN_ZOOM);
+  const punteros = useRef(new Map<number, Punto>());
+  const inicio = useRef<{ vista: Vista; puntos: Punto[] }>({ vista: SIN_ZOOM, puntos: [] });
+  const toque = useRef<{ t: number; punto: Punto; enFondo: boolean; movido: boolean } | null>(null);
+  const ultimoToque = useRef<{ t: number; punto: Punto } | null>(null);
+
+  function aplicar(v: Vista) {
+    const escala = Math.min(ZOOM_MAX, Math.max(1, v.escala));
+    const ancho = imagen.current?.offsetWidth ?? 0;
+    const alto = imagen.current?.offsetHeight ?? 0;
+    const [mx, my] = [((escala - 1) * ancho) / 2, ((escala - 1) * alto) / 2];
+    const limitada = { escala, x: Math.max(-mx, Math.min(mx, v.x)), y: Math.max(-my, Math.min(my, v.y)) };
+    actual.current = limitada;
+    setVista(limitada);
+  }
+
+  function relativo(evento: PointerEvent): Punto {
+    const caja = escenario.current?.getBoundingClientRect();
+    if (!caja) return { x: 0, y: 0 };
+    return { x: evento.clientX - caja.left - caja.width / 2, y: evento.clientY - caja.top - caja.height / 2 };
+  }
+
+  function alternar(punto: Punto = { x: 0, y: 0 }) {
+    if (actual.current.escala > 1) aplicar(SIN_ZOOM);
+    else aplicar({ escala: ZOOM_MAX, x: -punto.x * (ZOOM_MAX - 1), y: -punto.y * (ZOOM_MAX - 1) });
+  }
+
+  function reiniciarInicio() {
+    inicio.current = { vista: actual.current, puntos: [...punteros.current.values()] };
+  }
+
+  function alBajar(evento: PointerEvent) {
+    punteros.current.set(evento.pointerId, relativo(evento));
+    reiniciarInicio();
+    toque.current =
+      punteros.current.size === 1
+        ? { t: evento.timeStamp, punto: relativo(evento), enFondo: evento.target === evento.currentTarget, movido: false }
+        : null;
+  }
+
+  function alMover(evento: PointerEvent) {
+    if (!punteros.current.has(evento.pointerId)) return;
+    const punto = relativo(evento);
+    punteros.current.set(evento.pointerId, punto);
+    if (toque.current && distancia(toque.current.punto, punto) > 10) toque.current.movido = true;
+
+    const { vista: v0, puntos: p0 } = inicio.current;
+    const puntos = [...punteros.current.values()];
+    if (puntos.length >= 2 && p0.length >= 2) {
+      const escala = (v0.escala * distancia(puntos[0], puntos[1])) / Math.max(1, distancia(p0[0], p0[1]));
+      const [m0, m] = [medio(p0[0], p0[1]), medio(puntos[0], puntos[1])];
+      const ancla = { x: (m0.x - v0.x) / v0.escala, y: (m0.y - v0.y) / v0.escala };
+      aplicar({ escala, x: m.x - escala * ancla.x, y: m.y - escala * ancla.y });
+      setEnGesto(true);
+    } else if (puntos.length === 1 && v0.escala > 1 && toque.current?.movido !== false) {
+      aplicar({ ...v0, x: v0.x + puntos[0].x - p0[0].x, y: v0.y + puntos[0].y - p0[0].y });
+      setEnGesto(true);
+    }
+  }
+
+  function alSoltar(evento: PointerEvent) {
+    punteros.current.delete(evento.pointerId);
+    reiniciarInicio();
+    if (punteros.current.size === 0) setEnGesto(false);
+
+    const t = toque.current;
+    toque.current = null;
+    if (evento.type !== "pointerup" || !t || t.movido || evento.timeStamp - t.t > 350) return;
+    if (t.enFondo) return alTocarFondo();
+
+    const previo = ultimoToque.current;
+    if (previo && evento.timeStamp - previo.t < DOBLE_TOQUE_MS && distancia(previo.punto, t.punto) < 30) {
+      ultimoToque.current = null;
+      alternar(t.punto);
+    } else {
+      ultimoToque.current = { t: evento.timeStamp, punto: t.punto };
+    }
+  }
+
+  return {
+    vista,
+    enGesto,
+    alternar,
+    manejadores: {
+      onPointerDown: alBajar,
+      onPointerMove: alMover,
+      onPointerUp: alSoltar,
+      onPointerCancel: alSoltar,
+    },
+  };
 }

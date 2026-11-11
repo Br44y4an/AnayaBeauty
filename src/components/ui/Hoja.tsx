@@ -1,140 +1,149 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from "react";
 import { IconoCerrar } from "@/components/ui/Iconos";
+import { useBloquearScroll } from "@/hooks/useBloquearScroll";
+import { usePresencia } from "@/hooks/usePresencia";
 
-/**
- * Hoja inferior (bottom sheet).
- *
- * POR QUÉ UNA HOJA Y NO OTRA PÁGINA
- *
- * Entrar al detalle de un producto para elegir un tono y volver son dos
- * navegaciones, dos cargas y perder el sitio en el catálogo — carísimo en
- * mitad de un live. La hoja aparece encima, se resuelve y se va: la
- * clienta nunca pierde dónde estaba.
- *
- * Sube desde abajo porque ahí está el pulgar. En pantallas grandes se
- * centra como diálogo, que es lo que se espera con ratón.
- *
- * Accesibilidad: atrapa el tabulador (si no, se tabula al catálogo de
- * detrás, que no se ve), cierra con Escape, devuelve el foco a donde
- * estaba al cerrarse, y bloquea el scroll del fondo.
- */
-export function Hoja({
-  titulo,
-  descripcion,
-  alCerrar,
-  children,
-  pie,
-}: {
-  titulo: string;
-  descripcion?: ReactNode;
+type Props = {
+  /** Por defecto true: así funciona también montada y desmontada desde fuera (uso de la v4). */
+  abierta?: boolean;
   alCerrar: () => void;
-  children: ReactNode;
+  titulo: string;
+  tituloVisible?: boolean;
+  descripcion?: ReactNode;
   pie?: ReactNode;
-}) {
+  children: ReactNode;
+  ancho?: "normal" | "amplio";
+  pantallaCompleta?: boolean;
+};
+
+const ENFOCABLES =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Diálogo modal: sube desde abajo en el celular y se centra desde 768 px. Atrapa el tabulador, cierra con
+// Escape y devuelve el foco a quien la abrió. El foco inicial va a `[data-autofocus]` o, si no hay, al panel.
+export function Hoja({
+  abierta = true,
+  alCerrar,
+  titulo,
+  tituloVisible = true,
+  descripcion,
+  pie,
+  children,
+  ancho = "normal",
+  pantallaCompleta = false,
+}: Props) {
+  const { montada, saliendo } = usePresencia(abierta);
   const panel = useRef<HTMLDivElement>(null);
-  const focoPrevio = useRef<HTMLElement | null>(null);
+  const idTitulo = useId();
+  useBloquearScroll(montada);
+
+  const alPulsar = useEffectEvent((evento: KeyboardEvent) => {
+    if (evento.key === "Escape") {
+      evento.preventDefault();
+      alCerrar();
+    } else if (evento.key === "Tab" && panel.current) {
+      atraparTabulador(evento, panel.current);
+    }
+  });
 
   useEffect(() => {
-    focoPrevio.current = document.activeElement as HTMLElement | null;
-
-    const desbordeOriginal = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    // El primer foco va al panel, no al primer botón: si cayera en el
-    // primer tono, el lector de pantalla empezaría a leer la paleta sin
-    // haber dicho de qué producto es.
-    panel.current?.focus();
-
-    const alPulsar = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        alCerrar();
-        return;
-      }
-
-      if (e.key !== "Tab" || !panel.current) return;
-
-      const enfocables = panel.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      if (enfocables.length === 0) return;
-
-      const primero = enfocables[0];
-      const ultimo = enfocables[enfocables.length - 1];
-      const activo = document.activeElement;
-
-      if (e.shiftKey && (activo === primero || activo === panel.current)) {
-        e.preventDefault();
-        ultimo.focus();
-      } else if (!e.shiftKey && activo === ultimo) {
-        e.preventDefault();
-        primero.focus();
-      }
-    };
-
-    document.addEventListener("keydown", alPulsar, true);
-
+    if (!abierta) return;
+    const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const nodo = panel.current;
+    if (nodo && !nodo.contains(document.activeElement)) {
+      (nodo.querySelector<HTMLElement>("[data-autofocus]") ?? nodo).focus({ preventScroll: true });
+    }
+    const oyente = (evento: KeyboardEvent) => alPulsar(evento);
+    document.addEventListener("keydown", oyente);
     return () => {
-      document.removeEventListener("keydown", alPulsar, true);
-      document.body.style.overflow = desbordeOriginal;
-      focoPrevio.current?.focus?.();
+      document.removeEventListener("keydown", oyente);
+      if (previo?.isConnected && !nodo?.contains(previo)) previo.focus({ preventScroll: true });
     };
-  }, [alCerrar]);
+  }, [abierta]);
+
+  if (!montada) return null;
+  const cerrar = saliendo ? undefined : alCerrar;
 
   return (
-    <div
-      onClick={alCerrar}
-      className="fixed inset-0 z-[90] flex items-end justify-center bg-carbon/55
-                 animate-[aparecer_0.18s_ease] sm:items-center sm:p-4"
-    >
+    <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-6">
+      <div
+        aria-hidden="true"
+        onClick={cerrar}
+        className={`absolute inset-0 bg-tinta/48 ${saliendo ? "animate-desaparecer" : "animate-aparecer"}`}
+      />
       <div
         ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-label={titulo}
+        aria-labelledby={idTitulo}
         tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-tarjeta bg-petalo
-                   shadow-hoja outline-none animate-[subir-hoja_0.24s_ease-out]
-                   sm:max-h-[85vh] sm:rounded-tarjeta"
+        className={[
+          "relative flex w-full flex-col bg-fondo shadow-hoja outline-none",
+          pantallaCompleta ? "h-dvh" : "max-h-[90dvh] rounded-t-lg",
+          "md:h-auto md:max-h-[85dvh] md:rounded-lg md:shadow-flotante",
+          ancho === "amplio" ? "md:max-w-[1040px]" : "md:max-w-lg",
+          saliendo ? "animate-bajar md:animate-desaparecer" : "animate-subir md:animate-asomar",
+        ].join(" ")}
       >
-        {/* Asa: le dice a la clienta que esto es una hoja, no una página */}
-        <div className="flex justify-center pt-3 sm:hidden" aria-hidden="true">
-          <span className="h-1.5 w-12 rounded-full bg-lila-suave" />
-        </div>
-
-        <header className="flex items-start gap-3 px-5 pb-3 pt-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="font-display text-xl leading-tight text-carbon">{titulo}</h2>
-            {descripcion && (
-              <div className="pt-0.5 text-sm text-carbon-suave">{descripcion}</div>
-            )}
+        <header
+          className={
+            tituloVisible
+              ? "flex items-center gap-3 border-b border-linea py-2 pl-4 pr-2 md:pl-6"
+              : "absolute right-2 top-2 z-10"
+          }
+        >
+          <div className={tituloVisible ? "min-w-0 flex-1" : "sr-only"}>
+            <h2 id={idTitulo} className="text-xl font-semibold leading-[26px] text-tinta">
+              {titulo}
+            </h2>
+            {descripcion && <div className="mt-0.5 text-sm text-tinta-suave">{descripcion}</div>}
           </div>
-
           <button
             type="button"
-            onClick={alCerrar}
+            onClick={cerrar}
             aria-label="Cerrar"
-            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center
-                       rounded-full bg-rosa-nube text-carbon transition
-                       hover:bg-lila-suave/60"
+            className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full
+                       bg-superficie text-tinta transition-colors duration-150 hover:bg-linea"
           >
-            <IconoCerrar className="h-5 w-5" />
+            <IconoCerrar tamano={22} />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4">
-          {children}
-        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 md:px-6">{children}</div>
 
         {pie && (
-          <footer className="margen-seguro border-t border-rosa-nube bg-petalo px-5 py-4">
+          <footer className="border-t border-linea bg-fondo px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-6">
             {pie}
           </footer>
         )}
       </div>
     </div>
   );
+}
+
+/** Mantiene el foco dentro de `nodo` al tabular (también lo usa VisorImagen). */
+export function atraparTabulador(evento: KeyboardEvent, nodo: HTMLElement) {
+  const enfocables = Array.from(nodo.querySelectorAll<HTMLElement>(ENFOCABLES)).filter(
+    (elemento) => elemento.getClientRects().length > 0
+  );
+  if (enfocables.length === 0) {
+    evento.preventDefault();
+    nodo.focus();
+    return;
+  }
+
+  const primero = enfocables[0];
+  const ultimo = enfocables[enfocables.length - 1];
+  const activo = document.activeElement;
+  const fuera = activo === nodo || !nodo.contains(activo);
+
+  if (evento.shiftKey && (activo === primero || fuera)) {
+    evento.preventDefault();
+    ultimo.focus();
+  } else if (!evento.shiftKey && (activo === ultimo || fuera)) {
+    evento.preventDefault();
+    primero.focus();
+  }
 }

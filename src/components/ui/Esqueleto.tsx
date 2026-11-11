@@ -1,24 +1,20 @@
-/**
- * Esqueletos de carga.
- *
- * Una pantalla en blanco mientras carga se lee como "se trabó" y la
- * clienta recarga o se va. Un esqueleto con la forma de lo que viene
- * comunica "ya casi" y además reserva el espacio, así el contenido real
- * no empuja la página al aparecer (evita el salto de layout).
- */
+/** Reserva el espacio de lo que viene (sin saltos al cargar) y dice «ya casi» en vez de una pantalla en blanco. */
 export function Esqueleto({ className = "" }: { className?: string }) {
-  return <div aria-hidden="true" className={`esqueleto rounded-suave ${className}`} />;
+  return <div aria-hidden="true" className={`esqueleto rounded-sm ${className}`} />;
 }
 
+/** Misma forma que la tarjeta del catálogo: tesela 1:1 sin radio, textos y botón de 44 px. */
 export function EsqueletoTarjeta() {
   return (
-    <div className="overflow-hidden rounded-tarjeta bg-petalo shadow-petalo">
-      <Esqueleto className="aspect-square rounded-none" />
-      <div className="space-y-2 p-3">
+    <div>
+      <Esqueleto className="aspect-square w-full rounded-none" />
+      <div className="pt-2.5">
         <Esqueleto className="h-3 w-16" />
-        <Esqueleto className="h-4 w-full" />
-        <Esqueleto className="h-5 w-24" />
-        <Esqueleto className="h-11 w-full rounded-pastilla" />
+        <Esqueleto className="mt-2 h-4 w-full" />
+        <Esqueleto className="mt-1 h-4 w-3/4" />
+        <Esqueleto className="mt-2 h-3 w-20" />
+        <Esqueleto className="mt-2 h-5 w-24" />
+        <Esqueleto className="mt-2.5 h-11 w-full rounded-md" />
       </div>
     </div>
   );
@@ -29,7 +25,7 @@ export function EsqueletoGrilla({ cantidad = 8 }: { cantidad?: number }) {
     <div
       role="status"
       aria-label="Cargando productos"
-      className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4"
+      className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6 lg:gap-y-10"
     >
       {Array.from({ length: cantidad }, (_, i) => (
         <EsqueletoTarjeta key={i} />

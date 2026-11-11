@@ -1,48 +1,46 @@
 import type { Metadata, Viewport } from "next";
-import { Playfair_Display, Nunito } from "next/font/google";
-import { BotonFlotante } from "@/components/carrito/BotonFlotante";
+import type { ReactNode } from "react";
+import { Figtree } from "next/font/google";
 import "./globals.css";
 
-const playfair = Playfair_Display({
+const figtree = Figtree({
   subsets: ["latin"],
-  variable: "--fuente-playfair",
+  variable: "--fuente-figtree",
   display: "swap",
 });
 
-const nunito = Nunito({
-  subsets: ["latin"],
-  variable: "--fuente-nunito",
-  display: "swap",
-});
+function urlDelSitio(): URL | undefined {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "");
+  } catch {
+    return undefined;
+  }
+}
 
 export const metadata: Metadata = {
-  title: "Anaya Beauty — Belleza que te define",
+  metadataBase: urlDelSitio(),
+  title: {
+    default: "Anaya Beauty — Maquillaje y accesorios",
+    template: "%s · Anaya Beauty",
+  },
   description:
-    "Catálogo digital de maquillaje. Encuentra tus mejores productos y excelentes valores.",
-  // Los iconos ya no se declaran a mano: Next usa los archivos
-  // `icon.png`, `apple-icon.png` y `favicon.ico` de `src/app/`. El
-  // `/logo.jpg` que había aquí los tapaba con una foto sin recortar.
+    "Maquillaje y accesorios con precio por cantidad. Haz tu pedido aquí y coordinamos el pago por WhatsApp.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // Nunca se bloquea el zoom: para quien no ve de cerca, poder ampliar
-  // la pantalla es la diferencia entre poder comprar y no poder.
+  // Nunca se bloquea el zoom: para quien no ve bien de cerca, ampliar es poder comprar.
   maximumScale: 5,
-  themeColor: "#fdf2f7",
+  themeColor: "#ffffff",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children, modal }: { children: ReactNode; modal: ReactNode }) {
   return (
-    <html lang="es-CO" className={`${playfair.variable} ${nunito.variable}`}>
-      <body>
+    <html lang="es-CO" className={figtree.variable}>
+      <body className="bg-fondo text-tinta">
         {children}
-        <BotonFlotante />
+        {modal}
       </body>
     </html>
   );
