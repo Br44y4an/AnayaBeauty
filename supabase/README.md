@@ -90,6 +90,9 @@ Si seguiste una versión anterior de este archivo y creaste `productos_escritura
 o `productos_borrado`, la v5 también las limita a las administradoras; puedes
 borrarlas.
 
+Si creaste `productos_lectura` en storage.objects, bórrala: deja listar todo el
+bucket y las fotos se leen igual por su URL pública.
+
 ## Realtime
 
 Lo activa `migracion-v5.sql`: publica `orders` en `supabase_realtime`, así los

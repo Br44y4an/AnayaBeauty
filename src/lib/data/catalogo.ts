@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { clientePublico } from "@/lib/supabase/publico";
 import { ETIQUETA, VERSION_DATOS } from "@/lib/data/etiquetas";
 import { compactarReferencia, gruposDeBusqueda } from "@/lib/data/busqueda";
+import { falla } from "@/lib/data/errores";
 import { departamentoDe, idsDeCategoria } from "@/lib/categorias";
 import { ordenDeParametro } from "@/lib/rutas";
 import { ETIQUETAS_VARIANTE, resolverEtiqueta } from "@/lib/variantes";
@@ -18,10 +19,8 @@ import type {
   Variante,
 } from "@/lib/types";
 
-/**
- * Lecturas públicas del catálogo: cliente sin cookies y caché por etiquetas.
- * Las búsquedas de texto libre no se guardan (cada una es distinta).
- */
+// Lecturas públicas del catálogo: cliente sin cookies y caché por etiquetas.
+// Las búsquedas de texto libre no se guardan (cada una es distinta).
 
 export const POR_PAGINA = 24;
 const PAGINA_MAXIMA = 10;
@@ -35,8 +34,11 @@ const CAMPOS_GRILLA = `
   price_tiers ( min_cantidad, precio_unitario )
 `;
 const CAMPOS_FICHA = `${CAMPOS_GRILLA}, product_shades ( id, nombre, color_hex, orden, agotado )`;
+// Una RPC con select solo se puede ordenar por columnas de ese select: con otra, PostgREST
+// responde 42703. Por eso las búsquedas piden también las columnas de COLUMNAS_ORDEN.
+const CAMPOS_BUSQUEDA = `${CAMPOS_GRILLA}, orden, created_at, precio_base`;
 const CAMPOS_SUGERENCIA =
-  "referencia, nombre, imagen_principal, precio_base, num_tonos, category_id, etiqueta_variante";
+  "id, orden, referencia, nombre, imagen_principal, precio_base, num_tonos, category_id, etiqueta_variante";
 
 export type FilaEscalon = { min_cantidad: number; precio_unitario: number };
 
@@ -84,11 +86,6 @@ type FilaSugerencia = {
   category_id: string | null;
   etiqueta_variante: string | null;
 };
-
-function falla(mensaje: string, error: { message: string }): never {
-  console.error(`[catalogo] ${mensaje}:`, error);
-  throw new Error(`${mensaje}.`);
-}
 
 function etiquetaValida(v: string | null | undefined): EtiquetaVariante | null {
   return ETIQUETAS_VARIANTE.find((e) => e === v) ?? null;
@@ -169,7 +166,7 @@ export const obtenerCategorias: () => Promise<Categoria[]> = unstable_cache(
       .order("nombre")
       .overrideTypes<FilaCategoria[], { merge: false }>();
 
-    if (error) falla("No se pudieron cargar las categorías", error);
+    if (error) falla("catalogo", "No se pudieron cargar las categorías", error);
     return (data ?? []).map(mapearCategoria);
   },
   ["categorias", VERSION_DATOS],
@@ -218,7 +215,7 @@ async function consultarPagina(f: Filtros): Promise<PaginaProductos> {
     ? ordenar(
         supabase
           .rpc("buscar_productos", { p_grupos: grupos, p_categorias: ids }, { count: "exact" })
-          .select(CAMPOS_GRILLA),
+          .select(CAMPOS_BUSQUEDA),
         f.orden
       )
     : ordenar(
@@ -232,7 +229,7 @@ async function consultarPagina(f: Filtros): Promise<PaginaProductos> {
 
   // PGRST103: se pidió una página después de la última (el catálogo se encogió).
   if (error?.code === "PGRST103") return { ...vacia, total: desde };
-  if (error) falla("No se pudieron cargar los productos", error);
+  if (error) falla("catalogo", "No se pudieron cargar los productos", error);
 
   // Sin tipos generados, `rpc().select()` se tipa como «fila o lista»: siempre es lista.
   const filas: FilaProducto[] = Array.isArray(data) ? data : [];
@@ -279,7 +276,7 @@ const destacadosEnCache = unstable_cache(
         .overrideTypes<FilaProducto[], { merge: false }>(),
     ]);
 
-    if (error) falla("No se pudieron cargar los destacados", error);
+    if (error) falla("catalogo", "No se pudieron cargar los destacados", error);
     return (data ?? []).map((fila) => mapearProducto(fila, categorias));
   },
   ["destacados", VERSION_DATOS],
@@ -304,17 +301,15 @@ const fichaEnCache = unstable_cache(
         .overrideTypes<FilaProducto, { merge: false }>(),
     ]);
 
-    if (error) falla("No se pudo cargar el producto", error);
+    if (error) falla("catalogo", "No se pudo cargar el producto", error);
     return data ? mapearProducto(data, categorias) : null;
   },
   ["ficha", VERSION_DATOS],
   { tags: [ETIQUETA.catalogo], revalidate: REVALIDAR }
 );
 
-/**
- * Con variantes. Recibe la referencia YA decodificada (`decodificarReferencia`):
- * decodificar dos veces rompe «100%». `cache()` la comparte con generateMetadata.
- */
+/** Con variantes. Recibe la referencia YA decodificada (`decodificarReferencia`): decodificar dos veces
+ * rompe «100%». `cache()` la comparte con generateMetadata. */
 export const obtenerProductoPorReferencia = cache(
   (referencia: string): Promise<Producto | null> =>
     referencia ? fichaEnCache(referencia) : Promise.resolve(null)
@@ -339,7 +334,7 @@ const relacionadosEnCache = unstable_cache(
       .limit(limite * 3)
       .overrideTypes<FilaProducto[], { merge: false }>();
 
-    if (error) falla("No se pudieron cargar los productos relacionados", error);
+    if (error) falla("catalogo", "No se pudieron cargar los productos relacionados", error);
     const productos = (data ?? []).map((fila) => mapearProducto(fila, categorias));
     const mismaCategoria = productos.filter((p) => p.categoriaId === categoriaId);
     return [...mismaCategoria, ...productos.filter((p) => p.categoriaId !== categoriaId)].slice(0, limite);
@@ -373,7 +368,7 @@ export async function obtenerSugerencias(
       .range(0, CANDIDATOS_SUGERENCIA - 1),
   ]);
 
-  if (error) falla("No se pudieron cargar las sugerencias", error);
+  if (error) falla("catalogo", "No se pudieron cargar las sugerencias", error);
   const filas: FilaSugerencia[] = Array.isArray(data) ? data : [];
   const buscada = compactarReferencia(texto);
   const esExacta = (f: FilaSugerencia) => compactarReferencia(f.referencia) === buscada;

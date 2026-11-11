@@ -56,6 +56,21 @@ describe("resumenDeCompra", () => {
     expect(r.maxNuevas).toBe(2);
   });
 
+  it("con toda la existencia ya en la bolsa avisa del stock aunque no haya nada elegido", () => {
+    const lleno = resumenDeCompra({ escalones, stock: 3, unidadesEnBolsa: 3, unidadesNuevas: 0 });
+    // Si el stock bajó después de agregar, la bolsa tiene más de lo que queda.
+    const pasado = resumenDeCompra({ escalones, stock: 2, unidadesEnBolsa: 3, unidadesNuevas: 0 });
+
+    expect([lleno.maxNuevas, lleno.bloqueo]).toEqual([0, "supera-stock"]);
+    expect([pasado.maxNuevas, pasado.bloqueo]).toEqual([0, "supera-stock"]);
+  });
+
+  it("sin precio manda aunque la bolsa ya tenga toda la existencia", () => {
+    const r = resumenDeCompra({ escalones: [], stock: 3, unidadesEnBolsa: 3, unidadesNuevas: 0 });
+
+    expect(r.bloqueo).toBe("sin-precio");
+  });
+
   it("no promete un escalón que el stock no alcanza", () => {
     const alcanzable = resumenDeCompra({ escalones, stock: 5, unidadesEnBolsa: 0, unidadesNuevas: 1 });
     const inalcanzable = resumenDeCompra({ escalones, stock: 4, unidadesEnBolsa: 3, unidadesNuevas: 1 });

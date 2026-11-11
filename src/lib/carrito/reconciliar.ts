@@ -1,11 +1,8 @@
 import type { LineaCarrito, Variante } from "@/lib/types";
 import { normalizarTexto } from "@/lib/data/busqueda";
 
-/**
- * Contrasta la bolsa guardada en el navegador (puede tener días) con la
- * tienda de ahora. Lo que se pinta y lo que se envía salen de aquí, así que
- * lo que la clienta ve es exactamente lo que se pide.
- */
+// Contrasta la bolsa guardada en el navegador (puede tener días) con la tienda de ahora. Lo que se
+// pinta y lo que se envía salen de aquí: lo que la clienta ve es exactamente lo que se pide.
 
 export type Disponibilidad = {
   id: string;
@@ -51,10 +48,7 @@ export type CarritoReconciliado = {
 const mismoNombre = (a: string, b: string) =>
   normalizarTexto(a).trim() === normalizarTexto(b).trim();
 
-/**
- * El panel de la v4 regeneraba los id de las variantes en cada guardado: si
- * el id ya no existe, se busca la variante por su nombre.
- */
+/** El panel de la v4 regeneraba los id de las variantes al guardar: si el id ya no existe, se busca por nombre. */
 function varianteVigente(linea: LineaCarrito, variantes: Variante[]): Variante | null {
   const nombre = linea.tonoNombre;
   return (
@@ -64,11 +58,8 @@ function varianteVigente(linea: LineaCarrito, variantes: Variante[]): Variante |
   );
 }
 
-/**
- * Las variantes de un producto comparten inventario, así que el stock se
- * reparte entre sus líneas en el orden en que se agregaron: el mismo criterio
- * de `crear_pedido`, de modo que una bolsa que aquí sale entera no falla allá.
- */
+/** Las variantes comparten el stock del producto: se reparte entre sus líneas en el orden en que se agregaron,
+ * como hace `crear_pedido`, para que una bolsa que aquí sale entera no falle allá. */
 export function reconciliarCarrito(
   lineas: LineaCarrito[],
   disponibilidad: Disponibilidad[]
@@ -125,10 +116,7 @@ export function reconciliarCarrito(
   };
 }
 
-/**
- * Mensaje corto para una línea que cambió. «Se agotó» y «ya no está
- * disponible» son cosas distintas y la clienta merece saber cuál le pasó.
- */
+/** Mensaje corto para una línea que cambió: «se agotó» y «ya no está disponible» son cosas distintas. */
 export function explicarLinea(l: LineaReconciliada, nombre: string): string | null {
   const variante = l.linea.tonoNombre;
 

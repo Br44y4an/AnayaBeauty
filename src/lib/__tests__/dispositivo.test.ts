@@ -20,6 +20,14 @@ describe("vibrar", () => {
     expect(vibrate).toHaveBeenCalledWith(30);
   });
 
+  it("encuentra la vibración en el prototipo, que es donde la ponen los navegadores", () => {
+    const vibrate = vi.fn();
+    vi.stubGlobal("navigator", Object.create({ vibrate }));
+
+    vibrar();
+    expect(vibrate).toHaveBeenCalledWith(15);
+  });
+
   it("no hace nada donde no se puede vibrar (iPhone, servidor)", () => {
     vi.stubGlobal("navigator", {});
     expect(() => vibrar()).not.toThrow();

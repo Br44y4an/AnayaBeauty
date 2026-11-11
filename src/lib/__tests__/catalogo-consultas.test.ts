@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { clienteFalso, llamadas, type ConsultaFalsa, type RespuestaFalsa } from "./supabase-falso";
+import type { OrdenCatalogo } from "@/lib/types";
 
 vi.mock("server-only", () => ({}));
 // Sin servidor de Next no hay caché: la función se ejecuta tal cual.
@@ -53,6 +54,36 @@ function usar(resto: (c: ConsultaFalsa) => RespuestaFalsa) {
 }
 
 const de = (origen: string) => consultas.find((c) => c.origen === origen);
+
+/** Columnas de primer nivel de un select, sin los recursos embebidos. */
+function columnasDe(select: unknown): string[] {
+  return String(select)
+    .replace(/\w+\s*\([^)]*\)/g, "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
+// Como PostgREST (comprobado en vivo): una RPC con select solo ordena por columnas de ese select;
+// con otra responde 42703 «column products.orden does not exist».
+function comoPostgrest(c: ConsultaFalsa): RespuestaFalsa {
+  const select = llamadas(c, "select")[0];
+  if (c.origen.startsWith("rpc:") && select) {
+    const pedidas = columnasDe(select[0]);
+    const fuera = llamadas(c, "order").find(([columna]) => !pedidas.includes(String(columna)));
+    if (fuera) return { data: null, error: { code: "42703", message: `column products.${fuera[0]} does not exist` } };
+  }
+  return { data: [], error: null, count: 0 };
+}
+
+// Un Record obliga a sumar aquí cualquier orden nuevo.
+const TODOS_LOS_ORDENES: Record<OrdenCatalogo, true> = {
+  destacados: true,
+  "precio-asc": true,
+  "precio-desc": true,
+  nuevos: true,
+};
+const ORDENES = Object.keys(TODOS_LOS_ORDENES) as OrdenCatalogo[];
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -131,6 +162,16 @@ describe("obtenerProductos", () => {
     expect(de("from:products")).toBeUndefined();
   });
 
+  it.each(ORDENES)("con búsqueda, el orden «%s» funciona y es el mismo que sin búsqueda", async (orden) => {
+    usar(comoPostgrest);
+    await expect(obtenerProductos({ busqueda: "gloss", orden })).resolves.toMatchObject({ total: 0 });
+    const conBusqueda = llamadas(de("rpc:buscar_productos"), "order");
+
+    usar(comoPostgrest);
+    await obtenerProductos({ orden });
+    expect(conBusqueda).toEqual(llamadas(de("from:products"), "order"));
+  });
+
   it("una búsqueda sin palabras útiles no trae el catálogo entero", async () => {
     const pagina = await obtenerProductos({ busqueda: "a" });
 
@@ -188,6 +229,13 @@ describe("obtenerSugerencias", () => {
     const r = await obtenerSugerencias("producto");
     expect(r.productos).toHaveLength(8);
     expect(r.total).toBe(12);
+  });
+
+  it("ordena los candidatos de forma estable con columnas que la búsqueda devuelve", async () => {
+    usar(comoPostgrest);
+
+    await expect(obtenerSugerencias("usk621")).resolves.toEqual({ total: 0, productos: [] });
+    expect(llamadas(de("rpc:buscar_productos"), "order").map(([columna]) => columna)).toEqual(["orden", "id"]);
   });
 
   it("no consulta con menos de dos letras", async () => {

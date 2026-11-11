@@ -16,19 +16,17 @@ export type ResumenCompra = {
 
 const unidades = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
 
-function bloqueoDe(stock: number, hayPrecio: boolean, nuevas: number, maxNuevas: number) {
+function bloqueoDe(stock: number, hayPrecio: boolean, nuevas: number, maxNuevas: number): BloqueoCompra | null {
   if (stock === 0) return "agotado";
   if (!hayPrecio) return "sin-precio";
+  // Con toda la existencia ya en la bolsa no hay nada que elegir: «Elige un tono» la confundiría.
+  if (maxNuevas === 0 || nuevas > maxNuevas) return "supera-stock";
   if (nuevas === 0) return "sin-seleccion";
-  if (nuevas > maxNuevas) return "supera-stock";
   return null;
 }
 
-/**
- * La única cuenta de compra de la tienda. Las variantes de un producto
- * comparten escalón: lo nuevo se cobra al precio que alcanza junto con lo
- * que ya está en la bolsa.
- */
+/** La única cuenta de compra de la tienda. Las variantes de un producto comparten escalón: lo nuevo se
+ * cobra al precio que alcanza junto con lo que ya está en la bolsa. */
 export function resumenDeCompra(e: {
   escalones: Escalon[];
   stock: number;

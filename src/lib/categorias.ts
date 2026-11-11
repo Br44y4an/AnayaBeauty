@@ -5,18 +5,18 @@ export type Departamento = Categoria & { hijas: Categoria[] };
 const porOrden = (a: Categoria, b: Categoria) =>
   a.orden - b.orden || a.nombre.localeCompare(b.nombre, "es");
 
-/**
- * La raíz de una categoría dentro de la lista. Una hija cuyo padre no está
- * (oculto o borrado) es su propia raíz; el tope de pasos corta un ciclo.
- */
+// La raíz de una categoría dentro de la lista. Una hija cuyo padre no está (oculto o borrado) es
+// su propia raíz; en un ciclo, el primer miembro al que se llega hace de raíz y nada desaparece.
 function raizDe(categoria: Categoria, porId: Map<string, Categoria>): Categoria {
+  const visitadas = new Set([categoria]);
   let actual = categoria;
-  for (let pasos = 0; pasos < 10; pasos++) {
+  for (;;) {
     const padre = actual.categoriaPadreId ? porId.get(actual.categoriaPadreId) : undefined;
-    if (!padre || padre === categoria) return actual;
+    if (!padre) return actual;
+    if (visitadas.has(padre)) return padre;
+    visitadas.add(padre);
     actual = padre;
   }
-  return actual;
 }
 
 export function arbolDeCategorias(categorias: Categoria[]): Departamento[] {

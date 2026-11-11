@@ -126,10 +126,8 @@ describe("reconciliarCarrito", () => {
   });
 });
 
-/**
- * Bolsas guardadas por la v4: el panel viejo regeneraba los id de los tonos
- * en cada guardado, así que un id guardado puede no existir aunque el tono sí.
- */
+// Bolsas guardadas por la v4: el panel viejo regeneraba los id de los tonos en cada guardado,
+// así que un id guardado puede no existir aunque el tono sí.
 describe("reconciliarCarrito · variantes", () => {
   const rojo: Variante = { id: "v-rojo", nombre: "Rojo", colorHex: "#c00000", orden: 1, agotado: false };
   const nude: Variante = { id: "v-nude", nombre: "Nude", colorHex: "#d8b49c", orden: 2, agotado: true };
