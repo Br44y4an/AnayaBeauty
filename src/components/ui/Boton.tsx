@@ -7,12 +7,16 @@ export type TamanoBoton = "compacto" | "normal" | "grande";
 
 type Apariencia = { variante?: VarianteBoton; tamano?: TamanoBoton; ancho?: boolean };
 
+// Hover y presionado solo sin `disabled`: mientras carga el botón conserva su color y no debe reaccionar.
 const VARIANTES: Record<VarianteBoton, string> = {
-  primario: "bg-acento text-fondo hover:bg-acento-hondo active:bg-acento-hondo",
-  secundario: "border border-tinta bg-fondo text-tinta hover:bg-superficie active:bg-superficie",
-  contorno: "border border-borde bg-fondo text-tinta hover:border-tinta active:bg-superficie",
-  fantasma: "text-tinta hover:bg-superficie active:bg-superficie",
-  peligro: "border border-error bg-fondo text-error hover:bg-error-fondo active:bg-error-fondo",
+  primario: "bg-acento text-fondo not-disabled:hover:bg-acento-hondo not-disabled:active:bg-acento-hondo",
+  secundario:
+    "border border-tinta bg-fondo text-tinta not-disabled:hover:bg-superficie not-disabled:active:bg-superficie",
+  contorno:
+    "border border-borde bg-fondo text-tinta not-disabled:hover:border-tinta not-disabled:active:bg-superficie",
+  fantasma: "text-tinta not-disabled:hover:bg-superficie not-disabled:active:bg-superficie",
+  peligro:
+    "border border-error bg-fondo text-error not-disabled:hover:bg-error-fondo not-disabled:active:bg-error-fondo",
 };
 
 const TAMANOS: Record<TamanoBoton, string> = {

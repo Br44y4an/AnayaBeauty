@@ -77,4 +77,44 @@ describe("avisos", () => {
     vi.advanceTimersByTime(1);
     expect(avisoActual()).toBeNull();
   });
+
+  it("con foco y puntero a la vez solo se reanuda cuando terminan las dos pausas", () => {
+    mostrarAviso({ titulo: "Quitaste Tono 3" });
+    pausarAviso(); // foco
+    pausarAviso(); // puntero
+
+    reanudarAviso(); // sale el puntero
+    vi.advanceTimersByTime(60_000);
+    expect(avisoActual()?.titulo).toBe("Quitaste Tono 3");
+
+    reanudarAviso(); // se va el foco
+    vi.advanceTimersByTime(4999);
+    expect(avisoActual()).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(avisoActual()).toBeNull();
+  });
+
+  it("un aviso nuevo empieza sin las pausas del anterior", () => {
+    mostrarAviso({ titulo: "Agregado a tu bolsa" });
+    pausarAviso();
+
+    mostrarAviso({ titulo: "Copiado" });
+    vi.advanceTimersByTime(5000);
+
+    expect(avisoActual()).toBeNull();
+  });
+
+  it("reanudar sin una pausa activa no descuadra la cuenta", () => {
+    mostrarAviso({ titulo: "Copiado" });
+    reanudarAviso();
+    reanudarAviso();
+
+    pausarAviso();
+    vi.advanceTimersByTime(60_000);
+    expect(avisoActual()).not.toBeNull();
+
+    reanudarAviso();
+    vi.advanceTimersByTime(5000);
+    expect(avisoActual()).toBeNull();
+  });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { Avisos } from "@/components/ui/Avisos";
 import { avisoActual, cerrarAviso, mostrarAviso } from "@/lib/avisos";
 
@@ -64,5 +64,111 @@ describe("Avisos", () => {
 
     expect(screen.queryByText("Agregado a tu bolsa")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Copiado");
+  });
+
+  describe("pausa mientras lo usan", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("con foco y puntero encima, salir con el puntero no lo reanuda; quitar el foco sí", () => {
+      render(<Avisos />);
+      act(() =>
+        mostrarAviso({ titulo: "Quitaste Tono 3", accion: { etiqueta: "Deshacer", alHacer: () => {} } })
+      );
+      const tarjeta = screen.getByRole("status").firstElementChild!;
+      const deshacer = screen.getByRole("button", { name: "Deshacer" });
+
+      act(() => deshacer.focus());
+      fireEvent.pointerEnter(tarjeta);
+      fireEvent.pointerLeave(tarjeta);
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(screen.getByRole("status")).toHaveTextContent("Quitaste Tono 3");
+
+      act(() => deshacer.blur());
+      act(() => vi.advanceTimersByTime(4999));
+      expect(avisoActual()).not.toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+      expect(avisoActual()).toBeNull();
+      expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    });
+  });
+
+  describe("--alto-pie-fijo", () => {
+    const pies: HTMLElement[] = [];
+    const variable = () => document.documentElement.style.getPropertyValue("--alto-pie-fijo");
+
+    // jsdom no calcula cajas: el alto se simula en getBoundingClientRect.
+    function agregarPie(alto: number, posicion = "fixed") {
+      const pie = document.createElement("div");
+      pie.setAttribute("data-pie-fijo", "");
+      pie.style.position = posicion;
+      pie.getBoundingClientRect = () => ({ height: alto }) as DOMRect;
+      document.body.append(pie);
+      pies.push(pie);
+      return pie;
+    }
+
+    afterEach(() => {
+      pies.splice(0).forEach((pie) => pie.remove());
+      vi.unstubAllGlobals();
+    });
+
+    it("con un pie fijo de 96 px la fija en 96px y al quitarlo vuelve al valor por defecto", async () => {
+      render(<Avisos />);
+
+      const pie = agregarPie(96);
+      await waitFor(() => expect(variable()).toBe("96px"));
+
+      pie.remove();
+      await waitFor(() => expect(variable()).toBe(""));
+    });
+
+    it("mide el pie que ya estaba antes de montarse", () => {
+      agregarPie(80, "sticky");
+      render(<Avisos />);
+      expect(variable()).toBe("80px");
+    });
+
+    it("toma el más alto y sigue sus cambios de tamaño", () => {
+      let alAjustar: () => void = () => {};
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: () => void) {
+            alAjustar = callback;
+          }
+          observe() {}
+          disconnect() {}
+        }
+      );
+      agregarPie(64);
+      const alto = agregarPie(96);
+      render(<Avisos />);
+      expect(variable()).toBe("96px");
+
+      alto.getBoundingClientRect = () => ({ height: 120 }) as DOMRect;
+      act(() => alAjustar());
+      expect(variable()).toBe("120px");
+    });
+
+    it("un pie que no está fijo (la barra de la bolsa en escritorio) no lo sube", () => {
+      agregarPie(96, "static");
+      render(<Avisos />);
+      expect(variable()).toBe("0px");
+    });
+
+    it("deja de contar el pie que pierde la marca (el modal al cerrarse) y limpia al desmontarse", async () => {
+      const pie = agregarPie(96);
+      const { unmount } = render(<Avisos />);
+      expect(variable()).toBe("96px");
+
+      pie.removeAttribute("data-pie-fijo");
+      await waitFor(() => expect(variable()).toBe(""));
+
+      pie.setAttribute("data-pie-fijo", "");
+      await waitFor(() => expect(variable()).toBe("96px"));
+      unmount();
+      expect(variable()).toBe("");
+    });
   });
 });

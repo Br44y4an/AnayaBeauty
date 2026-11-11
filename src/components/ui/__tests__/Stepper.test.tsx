@@ -52,4 +52,15 @@ describe("Stepper", () => {
     expect(screen.getByRole("button", { name: "Agregar uno de Tono 3" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Quitar uno de Tono 3" })).toBeDisabled();
   });
+
+  it("deshabilitado se ve con fondo inactivo y texto tinta-suave, sin opacidad (como Boton)", () => {
+    render(<Stepper valor={0} max={5} onCambiar={() => {}} etiqueta="Tono 3" />);
+
+    const quitar = screen.getByRole("button", { name: "Quitar uno de Tono 3" });
+    expect(quitar).toBeDisabled();
+    const clases = quitar.className.split(/\s+/);
+    expect(clases.filter((clase) => clase.includes("opacity-"))).toEqual([]);
+    expect(clases).toContain("disabled:bg-inactivo");
+    expect(clases).toContain("disabled:text-tinta-suave");
+  });
 });

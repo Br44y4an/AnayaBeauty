@@ -14,7 +14,7 @@ type Props = {
 const BOTON =
   "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-tinta " +
   "transition-colors duration-150 hover:bg-superficie active:bg-superficie " +
-  "disabled:cursor-not-allowed disabled:bg-transparent disabled:text-tinta-suave disabled:opacity-40";
+  "disabled:cursor-not-allowed disabled:bg-inactivo disabled:text-tinta-suave";
 
 /** − cantidad +, con botones de 44 px. `etiqueta` nombra la variante: «Agregar uno de Tono 3». */
 export function Stepper({

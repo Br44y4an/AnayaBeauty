@@ -61,6 +61,14 @@ describe("estilosBoton", () => {
     }
   });
 
+  it("el hover y el presionado solo actúan si no está deshabilitado (tampoco mientras carga)", () => {
+    for (const variante of ["primario", "secundario", "contorno", "fantasma", "peligro"] as const) {
+      const clases = estilosBoton({ variante }).split(" ");
+      expect(clases.filter((clase) => /^(hover|active):/.test(clase))).toEqual([]);
+      expect(clases.some((clase) => clase.startsWith("not-disabled:hover:"))).toBe(true);
+    }
+  });
+
   it("añade el ancho completo y las clases extra", () => {
     const clases = estilosBoton({ ancho: true, className: "mt-4" });
     expect(clases).toContain("w-full");
