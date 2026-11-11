@@ -1,376 +1,219 @@
 "use client";
 
-import Image from "next/image";
-import { useActionState, useState } from "react";
+import { useState, useTransition, type FormEvent } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
-import { guardarProducto, subirImagen, type ResultadoGuardado } from "./actions";
-import { subtotalPara, type Escalon } from "@/lib/pricing";
-import { pesos } from "@/lib/format";
-import { Boton } from "@/components/ui/Boton";
-import { IconoMas, IconoCorazon } from "@/components/ui/Iconos";
-import type { Producto, Categoria } from "@/lib/types";
+import { Boton, BotonEnlace } from "@/components/ui/Boton";
+import { Campo } from "@/components/ui/Campo";
+import { AvisoPanel } from "@/components/admin/AvisoPanel";
+import { CampoArea, CampoLista, Interruptor } from "@/components/admin/CamposPanel";
+import { arbolDeCategorias, departamentoDe } from "@/lib/categorias";
+import { ETIQUETAS_VARIANTE, resolverEtiqueta } from "@/lib/variantes";
+import { urlListaProductos, type EstadoLista } from "@/lib/admin/filtros";
+import type { CategoriaPanel, ProductoPanel } from "@/lib/data/admin-catalog";
+import type { Resultado } from "@/lib/admin/resultado";
+import type { EtiquetaVariante } from "@/lib/types";
+import { guardarProducto } from "./actions";
+import { CampoImagen } from "./CampoImagen";
+import { EditorEscalones } from "./EditorEscalones";
+import { EditorVariantes } from "./EditorVariantes";
 
-const CAMPO =
-  "min-h-[44px] w-full rounded-suave border-2 border-lila-suave bg-petalo px-4 py-2.5 " +
-  "outline-none transition duration-200 focus:border-fucsia";
+const SECCION = "space-y-5 border-t border-linea pt-6";
+const SIN_CONEXION = "No se pudo conectar para guardar. Revisa tu internet e intenta otra vez.";
 
-type FilaEscalon = { minCantidad: number; precioUnitario: number };
-type FilaTono = { nombre: string; colorHex: string };
+function etiquetaHeredada(categoriaId: string, categorias: CategoriaPanel[]): EtiquetaVariante {
+  const departamento = departamentoDe(categoriaId || null, categorias);
+  return resolverEtiqueta({
+    producto: null,
+    categoria: categorias.find((c) => c.id === categoriaId)?.etiquetaVariante ?? null,
+    departamento: departamento?.etiquetaVariante ?? null,
+    slugDepartamento: departamento?.slug ?? null,
+  });
+}
 
+/** Los productos van en las categorías hijas; el departamento solo aparece si el producto ya está en él. */
+function OpcionesCategoria({ categorias, actual }: { categorias: CategoriaPanel[]; actual: string | null }) {
+  const oculta = new Set(categorias.filter((c) => !c.activo).map((c) => c.id));
+  const texto = (c: { id: string; nombre: string }) => (oculta.has(c.id) ? `${c.nombre} (oculta)` : c.nombre);
+
+  return (
+    <>
+      <option value="">Sin categoría</option>
+      {arbolDeCategorias(categorias).map((d) =>
+        d.hijas.length === 0 ? (
+          <option key={d.id} value={d.id}>
+            {texto(d)}
+          </option>
+        ) : (
+          <optgroup key={d.id} label={d.nombre}>
+            {d.id === actual && <option value={d.id}>{texto(d)}</option>}
+            {d.hijas.map((h) => (
+              <option key={h.id} value={h.id}>
+                {texto(h)}
+              </option>
+            ))}
+          </optgroup>
+        )
+      )}
+    </>
+  );
+}
+
+/** Valida todo en el servidor antes de escribir; si falla, cada error aparece junto a su campo. */
 export function FormularioProducto({
   producto,
   categorias,
+  lista,
 }: {
-  producto?: Producto;
-  categorias: Categoria[];
+  producto: ProductoPanel | null;
+  categorias: CategoriaPanel[];
+  lista: EstadoLista;
 }) {
   const router = useRouter();
-
-  const [estado, accion, enviando] = useActionState<ResultadoGuardado | null, FormData>(
-    guardarProducto,
-    null
-  );
-
+  const [pendiente, iniciar] = useTransition();
+  const [fallo, setFallo] = useState<Extract<Resultado, { ok: false }> | null>(null);
   const [imagen, setImagen] = useState(producto?.imagenPrincipal ?? "");
   const [subiendo, setSubiendo] = useState(false);
-  const [errorImagen, setErrorImagen] = useState<string | null>(null);
+  const [categoriaId, setCategoriaId] = useState(producto?.categoriaId ?? "");
+  const [etiqueta, setEtiqueta] = useState<string>(producto?.etiquetaPropia ?? "");
 
-  const [tonos, setTonos] = useState<FilaTono[]>(
-    producto?.variantes?.map((t) => ({ nombre: t.nombre, colorHex: t.colorHex })) ?? []
-  );
+  const heredada = etiquetaHeredada(categoriaId, categorias);
+  const efectiva = ETIQUETAS_VARIANTE.find((e) => e === etiqueta) ?? heredada;
+  const errores = fallo?.campos ?? {};
 
-  const [escalones, setEscalones] = useState<FilaEscalon[]>(
-    producto?.escalones.length
-      ? producto.escalones.map((e) => ({
-          minCantidad: e.minCantidad,
-          precioUnitario: e.precioUnitario,
-        }))
-      : [{ minCantidad: 1, precioUnitario: NaN }]
-  );
-
-  if (estado?.ok) {
-    router.push("/admin/productos");
+  function enviar(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    const formulario = evento.currentTarget;
+    const datos = new FormData(formulario);
+    iniciar(async () => {
+      const resultado = await guardarProducto(datos).catch(() => null);
+      if (resultado?.ok) {
+        router.push(urlListaProductos(lista, { guardado: resultado.id }));
+        return;
+      }
+      flushSync(() => setFallo(resultado ?? { ok: false, error: SIN_CONEXION }));
+      formulario.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalido] input:not([type="hidden"])')?.focus();
+    });
   }
-
-  async function alSubirImagen(archivo: File) {
-    setSubiendo(true);
-    setErrorImagen(null);
-    try {
-      const datos = new FormData();
-      datos.set("archivo", archivo);
-      const resultado = await subirImagen(datos);
-      if (resultado.ok) setImagen(resultado.url);
-      else setErrorImagen(resultado.error);
-    } catch {
-      // Solo queda aquí lo que ni siquiera llegó al servidor (red caída): el
-      // action ya devuelve sus propios fallos con un mensaje entendible.
-      setErrorImagen("No se pudo conectar para subir la imagen. Revisa tu internet.");
-    } finally {
-      setSubiendo(false);
-    }
-  }
-
-  function actualizar(indice: number, campo: keyof FilaEscalon, texto: string) {
-    const valor = texto === "" ? NaN : Number(texto);
-    setEscalones((previo) =>
-      previo.map((e, i) => (i === indice ? { ...e, [campo]: valor } : e))
-    );
-  }
-
-  // Vista previa con los mismos cálculos que verá la clienta
-  const validos: Escalon[] = escalones.filter((e) => e.precioUnitario > 0);
-  const ejemplos = [1, 3, 6, 12];
 
   return (
-    <form action={accion} className="max-w-2xl space-y-5">
-      {producto && <input type="hidden" name="id" value={producto.id} />}
+    <form onSubmit={enviar} noValidate className="space-y-8">
+      <input type="hidden" name="id" value={producto?.id ?? ""} />
       <input type="hidden" name="imagen_principal" value={imagen} />
+      <input type="hidden" name="etiqueta_efectiva" value={efectiva} />
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-carbon">Referencia</span>
-          <input
+      <section aria-labelledby="datos-titulo" className="space-y-5">
+        <h2 id="datos-titulo" className="sr-only">
+          Datos del producto
+        </h2>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Campo
+            id="referencia"
             name="referencia"
-            required
+            etiqueta="Referencia"
             defaultValue={producto?.referencia}
-            placeholder="REF-101"
-            className={`${CAMPO} uppercase`}
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-carbon">Stock</span>
-          <input
-            name="stock"
-            type="number"
-            min={0}
+            ayuda="Como aparece en la etiqueta, por ejemplo GLS735."
+            error={errores.referencia}
+            autoCapitalize="characters"
+            autoComplete="off"
             required
-            defaultValue={producto?.stock ?? 0}
-            className={CAMPO}
           />
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-semibold text-carbon">Nombre</span>
-        <input
-          name="nombre"
-          required
-          defaultValue={producto?.nombre}
-          placeholder="Labial Rojo Pasión"
-          className={CAMPO}
-        />
-      </label>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-semibold text-carbon">
-          Descripción <span className="font-normal text-carbon-suave">(opcional)</span>
-        </span>
-        <textarea
-          name="descripcion"
-          rows={2}
-          defaultValue={producto?.descripcion ?? ""}
-          className={CAMPO}
-        />
-      </label>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-semibold text-carbon">Categoría</span>
-        <select
-          name="category_id"
-          defaultValue={producto?.categoriaId ?? ""}
-          className={CAMPO}
-        >
-          <option value="">Sin categoría</option>
-          {categorias.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {/* Imagen */}
-      <div>
-        <span className="mb-1 block text-sm font-semibold text-carbon">Imagen</span>
-
-        <div className="flex items-center gap-4">
-          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-suave bg-rosa-nube">
-            {imagen ? (
-              <Image src={imagen} alt="Vista previa" fill sizes="96px" className="object-cover" />
-            ) : (
-              <div className="flex h-full items-center justify-center text-lila-suave">
-                <IconoCorazon className="h-7 w-7" />
-              </div>
-            )}
-          </div>
-
-          <div className="flex-1">
-            <input
-              type="file"
-              accept="image/*"
-              disabled={subiendo}
-              onChange={(e) => {
-                const archivo = e.target.files?.[0];
-                if (archivo) alSubirImagen(archivo);
-              }}
-              className="w-full text-sm text-carbon-suave file:mr-3 file:cursor-pointer
-                         file:rounded-pastilla file:border-0 file:bg-lila-suave/50
-                         file:px-4 file:py-2 file:text-sm file:font-semibold file:text-lila"
-            />
-            {subiendo && <p className="pt-1 text-xs text-lila">Subiendo…</p>}
-            {errorImagen && <p className="pt-1 text-xs text-fucsia">{errorImagen}</p>}
-          </div>
+          <Campo
+            id="stock"
+            name="stock"
+            etiqueta="Unidades en stock"
+            defaultValue={producto?.stock ?? 0}
+            inputMode="numeric"
+            error={errores.stock}
+            required
+          />
         </div>
-      </div>
-
-      {/* Escalones de precio */}
-      <fieldset className="space-y-3 rounded-tarjeta bg-petalo p-4 shadow-petalo">
-        <legend className="px-1 text-sm font-semibold text-carbon">
-          Precios por cantidad
-        </legend>
-
-        <p className="text-xs text-carbon-suave">
-          El primer escalón siempre es 1 unidad. Agrega más para premiar a quien lleve
-          varias: por ejemplo, desde 3 a $9.000 y desde 6 a $8.000.
-        </p>
-
-        {escalones.map((e, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-carbon-suave">desde</span>
-
-            <input
-              name="min_cantidad"
-              type="number"
-              min={1}
-              value={Number.isNaN(e.minCantidad) ? "" : e.minCantidad}
-              readOnly={i === 0}
-              onChange={(ev) => actualizar(i, "minCantidad", ev.target.value)}
-              className={`w-20 rounded-suave border-2 border-lila-suave px-3 py-2
-                          outline-none focus:border-fucsia ${i === 0 ? "bg-rosa-nube" : "bg-petalo"}`}
-            />
-
-            <span className="text-sm text-carbon-suave">unds →</span>
-
-            <input
-              name="precio_unitario"
-              type="number"
-              min={1}
-              step={1}
-              value={Number.isNaN(e.precioUnitario) ? "" : e.precioUnitario}
-              onChange={(ev) => actualizar(i, "precioUnitario", ev.target.value)}
-              className="w-32 rounded-suave border-2 border-lila-suave bg-petalo px-3 py-2
-                         outline-none focus:border-fucsia"
-            />
-
-            <span className="text-sm text-carbon-suave">c/u</span>
-
-            {i > 0 && (
-              <button
-                type="button"
-                onClick={() => setEscalones((p) => p.filter((_, j) => j !== i))}
-                className="min-h-[44px] cursor-pointer px-2 text-xs text-carbon-suave
-                           underline transition hover:text-fucsia"
-              >
-                quitar
-              </button>
-            )}
-          </div>
-        ))}
-
-        <button
-          type="button"
-          onClick={() =>
-            setEscalones((p) => [
-              ...p,
-              {
-                minCantidad: Math.max(...p.map((e) => e.minCantidad || 0)) + 2,
-                precioUnitario: NaN,
-              },
-            ])
-          }
-          className="inline-flex min-h-[44px] cursor-pointer items-center gap-1
-                     rounded-pastilla border-2 border-fucsia-suave px-4 text-sm
-                     font-semibold text-fucsia transition hover:border-fucsia"
-        >
-          <IconoMas className="h-4 w-4" /> Agregar escalón
-        </button>
-
-        {validos.length > 0 && (
-          <div className="rounded-suave bg-rosa-nube p-3">
-            <p className="pb-2 text-xs font-semibold text-carbon">
-              Así lo verá la clienta:
-            </p>
-            <ul className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-4">
-              {ejemplos.map((cantidad) => (
-                <li key={cantidad} className="text-carbon-suave">
-                  {cantidad} und{cantidad > 1 ? "s" : ""} ={" "}
-                  <strong className="text-fucsia">
-                    {pesos(subtotalPara(validos, cantidad))}
-                  </strong>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </fieldset>
-
-      {/* Tonos de color */}
-      <fieldset className="space-y-3 rounded-tarjeta bg-petalo p-4 shadow-petalo">
-        <legend className="px-1 text-sm font-semibold text-carbon">
-          Tonos de color
-        </legend>
-
-        <p className="text-xs text-carbon-suave">
-          Solo para productos que se venden en varios tonos, como labiales o
-          sombras. Si agregas tonos, la clienta <strong>tendrá que elegir uno</strong>{" "}
-          antes de poder comprar. Déjalo vacío para brochas, esponjas y demás.
-        </p>
-
-        {tonos.map((t, i) => (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <input
-              type="color"
-              name="tono_color"
-              value={t.colorHex}
-              onChange={(ev) =>
-                setTonos((p) =>
-                  p.map((x, j) => (j === i ? { ...x, colorHex: ev.target.value } : x))
-                )
-              }
-              aria-label={`Color del tono ${i + 1}`}
-              className="h-11 w-14 cursor-pointer rounded-suave border-2 border-lila-suave bg-petalo"
-            />
-
-            <input
-              name="tono_nombre"
-              value={t.nombre}
-              placeholder="Cereza"
-              onChange={(ev) =>
-                setTonos((p) =>
-                  p.map((x, j) => (j === i ? { ...x, nombre: ev.target.value } : x))
-                )
-              }
-              className="min-h-[44px] flex-1 rounded-suave border-2 border-lila-suave
-                         bg-petalo px-4 outline-none focus:border-fucsia"
-            />
-
-            <span
-              style={{ backgroundColor: t.colorHex }}
-              className="h-9 w-9 shrink-0 rounded-full ring-1 ring-black/10"
-              aria-hidden="true"
-            />
-
-            <button
-              type="button"
-              onClick={() => setTonos((p) => p.filter((_, j) => j !== i))}
-              className="min-h-[44px] cursor-pointer px-2 text-xs text-carbon-suave
-                         underline transition hover:text-fucsia"
-            >
-              quitar
-            </button>
-          </div>
-        ))}
-
-        <button
-          type="button"
-          onClick={() => setTonos((p) => [...p, { nombre: "", colorHex: "#E5308A" }])}
-          className="inline-flex min-h-[44px] cursor-pointer items-center gap-1
-                     rounded-pastilla border-2 border-lila-suave px-4 text-sm
-                     font-semibold text-lila transition hover:border-lila"
-        >
-          <IconoMas className="h-4 w-4" /> Agregar tono
-        </button>
-      </fieldset>
-
-      <label className="flex cursor-pointer items-center gap-2">
-        <input
-          type="checkbox"
-          name="activo"
-          defaultChecked={producto?.activo ?? true}
-          className="h-5 w-5 accent-[#E5308A]"
+        <Campo id="nombre" name="nombre" etiqueta="Nombre" defaultValue={producto?.nombre} error={errores.nombre} required />
+        <CampoArea
+          id="descripcion"
+          name="descripcion"
+          etiqueta="Descripción (opcional)"
+          ayuda="Solo si agrega algo al nombre: tamaño, acabado o cómo se usa."
+          defaultValue={producto?.descripcion ?? ""}
+          error={errores.descripcion}
+          rows={3}
         />
-        <span className="text-sm text-carbon">Visible en el catálogo</span>
-      </label>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <CampoLista
+            id="category_id"
+            name="category_id"
+            etiqueta="Categoría"
+            value={categoriaId}
+            onChange={(e) => setCategoriaId(e.target.value)}
+            error={errores.category_id}
+          >
+            <OpcionesCategoria categorias={categorias} actual={producto?.categoriaId ?? null} />
+          </CampoLista>
+          <CampoLista
+            id="etiqueta_variante"
+            name="etiqueta_variante"
+            etiqueta="Las variantes se llaman"
+            ayuda="Así lo dice la tienda: «Elige el tono», «6 colores»."
+            value={etiqueta}
+            onChange={(e) => setEtiqueta(e.target.value)}
+            error={errores.etiqueta_variante}
+          >
+            <option value="">Según la categoría ({heredada.toLowerCase()})</option>
+            {ETIQUETAS_VARIANTE.map((e) => (
+              <option key={e} value={e}>
+                {e}
+              </option>
+            ))}
+          </CampoLista>
+        </div>
+      </section>
 
-      {estado && !estado.ok && (
-        <p role="alert" className="rounded-suave bg-fucsia/10 p-3 text-sm text-fucsia">
-          {estado.error}
-        </p>
-      )}
+      <section aria-label="Foto" className={SECCION}>
+        <CampoImagen
+          valor={imagen}
+          inicial={producto?.imagenPrincipal ?? ""}
+          alCambiar={setImagen}
+          alOcupar={setSubiendo}
+          error={errores.imagen_principal}
+        />
+      </section>
 
-      <div className="flex gap-3">
-        <Boton type="submit" disabled={enviando || subiendo}>
-          {enviando ? "Guardando…" : "Guardar producto"}
-        </Boton>
+      <section className={SECCION}>
+        <EditorEscalones iniciales={producto?.escalones ?? []} error={errores.escalones} />
+      </section>
 
-        <Boton
-          type="button"
-          variante="fantasma"
-          onClick={() => router.push("/admin/productos")}
-        >
-          Cancelar
-        </Boton>
+      <section className={SECCION}>
+        <EditorVariantes iniciales={producto?.variantes ?? []} etiqueta={efectiva} error={errores.variantes} />
+      </section>
+
+      <section aria-label="En la tienda" className={`${SECCION} space-y-1`}>
+        <Interruptor
+          id="activo"
+          name="activo"
+          etiqueta="Visible en la tienda"
+          ayuda="Apágalo para sacarlo de la tienda sin borrarlo."
+          defaultChecked={producto?.activo ?? true}
+        />
+        <Interruptor
+          id="destacado"
+          name="destacado"
+          etiqueta="Destacado"
+          ayuda="Sale en «Destacados», al inicio de la tienda, mientras tenga stock."
+          defaultChecked={producto?.destacado ?? false}
+        />
+      </section>
+
+      <div className="space-y-4 border-t border-linea pt-6">
+        {fallo && <AvisoPanel tono="error">{fallo.error}</AvisoPanel>}
+        {subiendo && <p className="text-sm text-tinta-suave">Espera a que termine de subir la foto para guardar.</p>}
+        <div className="flex flex-wrap gap-3">
+          <Boton type="submit" cargando={pendiente} disabled={subiendo}>
+            {pendiente ? "Guardando…" : producto ? "Guardar cambios" : "Crear producto"}
+          </Boton>
+          <BotonEnlace href={urlListaProductos(lista)} variante="fantasma">
+            Cancelar
+          </BotonEnlace>
+        </div>
       </div>
     </form>
   );

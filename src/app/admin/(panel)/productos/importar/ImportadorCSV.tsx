@@ -1,164 +1,140 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { parsearCSV, type FilaCSV } from "@/lib/csv";
-import { subtotalPara } from "@/lib/pricing";
-import { pesos } from "@/lib/format";
-import { Boton } from "@/components/ui/Boton";
-import type { ResumenImportacion } from "./actions";
-import { importarProductos } from "./actions";
+import { useRef, useState, useTransition } from "react";
+import { Boton, BotonEnlace, estilosBoton } from "@/components/ui/Boton";
+import { Giro } from "@/components/ui/Giro";
+import { AvisoPanel } from "@/components/admin/AvisoPanel";
+import { aplicarImportacion, revisarImportacion, type ResumenImportacion, type VistaPrevia } from "./actions";
+import { ListaMensajes, VistaImportacion } from "./VistaImportacion";
 
+const SIN_CONEXION = "No se pudo conectar con el servidor. Revisa tu internet e intenta otra vez.";
+
+type Archivo = { nombre: string; texto: string };
+
+/** Elegir el archivo, ver qué cambiaría y confirmar. Nada se escribe hasta pulsar «Importar». */
 export function ImportadorCSV() {
-  const router = useRouter();
-  const [pendiente, iniciarTransicion] = useTransition();
-
-  const [filas, setFilas] = useState<FilaCSV[]>([]);
-  const [errores, setErrores] = useState<string[]>([]);
+  const entrada = useRef<HTMLInputElement>(null);
+  const [archivo, setArchivo] = useState<Archivo | null>(null);
+  const [vista, setVista] = useState<VistaPrevia | null>(null);
   const [resumen, setResumen] = useState<ResumenImportacion | null>(null);
-  const [nombreArchivo, setNombreArchivo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [publicar, setPublicar] = useState(true);
+  const [revisando, iniciarRevision] = useTransition();
+  const [importando, iniciarImportacion] = useTransition();
 
-  async function leerArchivo(archivo: File) {
+  function reiniciar() {
+    setArchivo(null);
+    setVista(null);
     setResumen(null);
-    setNombreArchivo(archivo.name);
-
-    const texto = await archivo.text();
-    const resultado = parsearCSV(texto);
-
-    setFilas(resultado.filas);
-    setErrores(resultado.errores);
+    setError(null);
+    if (entrada.current) {
+      entrada.current.value = "";
+      entrada.current.focus();
+    }
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-petalo">
-        <p className="text-sm text-carbon">
-          Sube un archivo CSV con tus productos. Si una referencia ya existe, se
-          actualiza en vez de duplicarse, así que puedes volver a subir el mismo
-          archivo corregido sin problema.
-        </p>
+  function revisar(elegido: File) {
+    setVista(null);
+    setResumen(null);
+    setError(null);
+    iniciarRevision(async () => {
+      let texto: string;
+      try {
+        texto = await elegido.text();
+      } catch {
+        setError("No pudimos leer ese archivo. Guárdalo otra vez como CSV e inténtalo de nuevo.");
+        return;
+      }
+      setArchivo({ nombre: elegido.name, texto });
+      const resultado = await revisarImportacion(texto).catch(() => null);
+      if (resultado?.ok) setVista(resultado.vista);
+      else setError(resultado?.error ?? SIN_CONEXION);
+    });
+  }
 
-        <a
-          href="/plantilla-productos.csv"
-          download
-          className="inline-block text-sm font-semibold text-lila underline hover:text-fucsia"
-        >
-          Descargar plantilla de ejemplo
-        </a>
+  function importar() {
+    if (!archivo) return;
+    setError(null);
+    iniciarImportacion(async () => {
+      const resultado = await aplicarImportacion(archivo.texto, publicar).catch(() => null);
+      if (resultado?.ok) {
+        setResumen(resultado.resumen);
+        setVista(null);
+      } else {
+        setError(resultado?.error ?? SIN_CONEXION);
+      }
+    });
+  }
 
-        <p className="text-xs text-carbon-suave">
-          Columnas: <code>referencia, nombre, descripcion, categoria, stock,
-          precio_1, precio_3, precio_6</code>. Solo <code>precio_1</code> es
-          obligatorio; deja vacíos los otros si ese producto no tiene combos.
-        </p>
-
-        <input
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => {
-            const archivo = e.target.files?.[0];
-            if (archivo) leerArchivo(archivo);
-          }}
-          className="w-full text-sm text-carbon-suave file:mr-3 file:cursor-pointer
-                     file:rounded-pastilla file:border-0 file:bg-fucsia file:px-5
-                     file:py-2.5 file:text-sm file:font-semibold file:text-petalo"
-        />
-      </div>
-
-      {errores.length > 0 && (
-        <div className="rounded-tarjeta bg-fucsia/10 p-4">
-          <p className="pb-2 text-sm font-semibold text-fucsia">
-            {errores.length} {errores.length === 1 ? "fila tiene" : "filas tienen"} problemas
-            y no se importarán:
-          </p>
-          <ul className="space-y-1 text-xs text-carbon">
-            {errores.slice(0, 20).map((e, i) => (
-              <li key={i}>• {e}</li>
-            ))}
-            {errores.length > 20 && <li>… y {errores.length - 20} más</li>}
-          </ul>
-        </div>
-      )}
-
-      {filas.length > 0 && !resumen && (
-        <div className="space-y-4">
-          <div className="rounded-tarjeta bg-petalo p-4 shadow-petalo">
-            <p className="pb-3 text-sm font-semibold text-carbon">
-              {filas.length} productos listos desde {nombreArchivo}
-            </p>
-
-            <div className="max-h-80 overflow-y-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-petalo">
-                  <tr className="text-carbon-suave">
-                    <th className="pb-2">Ref.</th>
-                    <th className="pb-2">Nombre</th>
-                    <th className="pb-2 text-center">Stock</th>
-                    <th className="pb-2 text-right">1 und</th>
-                    <th className="pb-2 text-right">3 unds</th>
-                    <th className="pb-2 text-right">6 unds</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filas.map((f) => (
-                    <tr key={f.referencia} className="border-t border-rosa-nube">
-                      <td className="py-2 font-bold text-lila">{f.referencia}</td>
-                      <td className="py-2 text-carbon">{f.nombre}</td>
-                      <td className="py-2 text-center text-carbon">{f.stock}</td>
-                      <td className="py-2 text-right text-carbon">
-                        {pesos(subtotalPara(f.escalones, 1))}
-                      </td>
-                      <td className="py-2 text-right text-carbon">
-                        {pesos(subtotalPara(f.escalones, 3))}
-                      </td>
-                      <td className="py-2 text-right text-fucsia">
-                        {pesos(subtotalPara(f.escalones, 6))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <Boton
-            disabled={pendiente}
-            onClick={() =>
-              iniciarTransicion(async () => {
-                setResumen(await importarProductos(filas));
-                router.refresh();
-              })
-            }
-          >
-            {pendiente ? "Importando…" : `Importar ${filas.length} productos`}
+  if (resumen) {
+    const { creados, actualizados, errores } = resumen;
+    return (
+      <div className="space-y-4">
+        <AvisoPanel tono={errores.length > 0 ? "alerta" : "exito"}>
+          Importación terminada: {creados} {creados === 1 ? "producto nuevo" : "productos nuevos"} y {actualizados}{" "}
+          {actualizados === 1 ? "actualizado" : "actualizados"}.
+        </AvisoPanel>
+        {errores.length > 0 && (
+          <AvisoPanel tono="error">
+            <p className="font-semibold">Esto no se pudo guardar:</p>
+            <ListaMensajes mensajes={errores} />
+          </AvisoPanel>
+        )}
+        <div className="flex flex-wrap gap-3">
+          <BotonEnlace href="/admin/productos">Ver productos</BotonEnlace>
+          <Boton type="button" variante="fantasma" onClick={reiniciar}>
+            Importar otro archivo
           </Boton>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {resumen && (
-        <div className="space-y-3 rounded-tarjeta bg-petalo p-5 shadow-flotante">
-          <p className="font-display text-xl text-fucsia">Importación terminada</p>
-          <ul className="space-y-1 text-sm text-carbon">
-            <li>✓ {resumen.creados} productos nuevos</li>
-            <li>✓ {resumen.actualizados} productos actualizados</li>
-            {resumen.errores.length > 0 && (
-              <li className="text-fucsia">✗ {resumen.errores.length} con error</li>
-            )}
-          </ul>
+  const ocupado = revisando || importando;
 
-          {resumen.errores.length > 0 && (
-            <ul className="space-y-1 text-xs text-carbon-suave">
-              {resumen.errores.map((e, i) => (
-                <li key={i}>• {e}</li>
-              ))}
-            </ul>
-          )}
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          ref={entrada}
+          id="archivo-csv"
+          type="file"
+          accept=".csv,text/csv"
+          disabled={ocupado}
+          onChange={(e) => {
+            const elegido = e.target.files?.[0];
+            if (elegido) revisar(elegido);
+          }}
+          className="peer sr-only"
+        />
+        <label
+          htmlFor="archivo-csv"
+          className={estilosBoton({
+            variante: archivo ? "contorno" : "primario",
+            className:
+              "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-acento " +
+              "peer-disabled:cursor-wait peer-disabled:bg-inactivo peer-disabled:text-tinta-suave",
+          })}
+        >
+          {archivo ? "Elegir otro archivo" : "Elegir archivo CSV"}
+        </label>
+        {archivo && <span className="min-w-0 break-all text-[15px] text-tinta-suave">{archivo.nombre}</span>}
+        <span role="status" className="inline-flex items-center gap-2 text-[15px] text-tinta">
+          {ocupado && <Giro />}
+          {revisando ? "Revisando el archivo…" : importando ? "Importando, no cierres esta página…" : ""}
+        </span>
+      </div>
 
-          <Link href="/admin/productos" className="inline-block">
-            <Boton>Ver mis productos</Boton>
-          </Link>
-        </div>
+      {error && <AvisoPanel tono="error">{error}</AvisoPanel>}
+
+      {vista && (
+        <VistaImportacion
+          vista={vista}
+          publicar={publicar}
+          alCambiarPublicar={setPublicar}
+          importando={importando}
+          alImportar={importar}
+        />
       )}
     </div>
   );

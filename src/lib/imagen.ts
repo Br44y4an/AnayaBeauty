@@ -1,10 +1,6 @@
 /**
- * Validación y nombrado de las imágenes de producto.
- *
- * Va aparte del Server Action para poder probarlo sin tocar Supabase, y
- * porque los mensajes tienen que ser legibles: cuando el action lanzaba, React
- * los borraba en producción y el panel solo mostraba "Minified React error
- * #441", sin decir qué había pasado.
+ * Validación y nombrado de las fotos de producto, aparte del Server Action para probarlos sin Supabase
+ * y devolver mensajes legibles: React borra en producción el mensaje de una excepción.
  */
 
 export const MAX_BYTES = 5 * 1024 * 1024;
@@ -23,6 +19,21 @@ export function validarImagen(archivo: ArchivoSubido): string | null {
     return `La imagen pesa ${mb} MB y el máximo son 5 MB. Usa una más liviana.`;
   }
 
+  return null;
+}
+
+export type TipoImagen = { extension: "jpg" | "png" | "webp"; mime: string };
+
+const empiezaCon = (bytes: Uint8Array, firma: number[], desde = 0) =>
+  bytes.length >= desde + firma.length && firma.every((b, i) => bytes[desde + i] === b);
+
+/** El tipo real por los primeros bytes: el nombre y el tipo que manda el navegador no son confiables. */
+export function tipoDeImagen(bytes: Uint8Array): TipoImagen | null {
+  if (empiezaCon(bytes, [0xff, 0xd8, 0xff])) return { extension: "jpg", mime: "image/jpeg" };
+  if (empiezaCon(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { extension: "png", mime: "image/png" };
+  const riff = [0x52, 0x49, 0x46, 0x46];
+  const webp = [0x57, 0x45, 0x42, 0x50];
+  if (empiezaCon(bytes, riff) && empiezaCon(bytes, webp, 8)) return { extension: "webp", mime: "image/webp" };
   return null;
 }
 
