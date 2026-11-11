@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { plantillaCorreoPedido } from "@/lib/email/order-template";
+import { PALETA } from "@/lib/marca";
 
 const datos = {
   numeroPedido: "AB-0043",
@@ -73,7 +74,7 @@ describe("plantillaCorreoPedido — tonos y descuentos", () => {
       porcentaje: 5,
       total: 70300,
     });
-    expect(html).toContain("Descuento 5%");
+    expect(html).toContain("Descuento 5 %");
     expect(html).toContain("$3.700");
     expect(html).toContain("$70.300");
   });
@@ -86,6 +87,38 @@ describe("plantillaCorreoPedido — tonos y descuentos", () => {
   it("omite el desglose cuando no hubo ningún beneficio", () => {
     const html = plantillaCorreoPedido(datos);
     expect(html).not.toContain("Precio por mayor aplicado");
-    expect(html).not.toContain("Descuento 0%");
+    expect(html).not.toContain("Descuento 0 %");
+  });
+});
+
+describe("plantillaCorreoPedido — sistema visual v5", () => {
+  it("no lleva emoji ni el «Código usado» de la v3", () => {
+    const html = plantillaCorreoPedido({
+      ...datos,
+      porMayor: true,
+      porcentaje: 5,
+      descuento: 3700,
+      notas: "Es un regalo",
+    });
+    expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(html).not.toContain("Código usado");
+  });
+
+  it("usa solo los colores de la paleta de la marca", () => {
+    const html = plantillaCorreoPedido(datos);
+    const permitidos = new Set(Object.values(PALETA).map((c) => c.toLowerCase()));
+    const usados = (html.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).map((c) => c.toLowerCase());
+
+    expect(usados.length).toBeGreaterThan(0);
+    expect(usados.filter((c) => !permitidos.has(c))).toEqual([]);
+  });
+
+  it("rotula el total como «Total productos»: el envío se coordina aparte", () => {
+    expect(plantillaCorreoPedido(datos)).toContain("Total productos");
+  });
+
+  it("el botón del panel apunta al sitio desde el que se hizo el pedido", () => {
+    const html = plantillaCorreoPedido({ ...datos, sitio: "https://tienda.test" });
+    expect(html).toContain('href="https://tienda.test/admin"');
   });
 });
