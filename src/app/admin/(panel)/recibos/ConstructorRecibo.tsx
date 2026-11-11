@@ -300,19 +300,22 @@ export function ConstructorRecibo({
                         {l.tono && <span className="font-semibold"> · {l.tono}</span>}{" "}
                         <span className="tabular-nums text-tinta-suave">× {l.cantidad}</span>
                       </span>
-                      <span className="ml-auto flex items-center gap-2">
-                        <input
-                          type="number"
-                          inputMode="numeric"
-                          min={0}
-                          aria-label={`Precio unitario de ${l.nombre}${l.tono ? `, ${l.tono}` : ""}`}
-                          className={PRECIO}
-                          value={precio}
-                          onChange={(e) =>
-                            setPreciosPedidoOverride({ ...preciosPedidoOverride, [l.id]: Number(e.target.value) })
-                          }
-                        />
-                        <span className="min-w-20 text-right font-semibold tabular-nums">{pesos(precio * l.cantidad)}</span>
+                      <span className="ml-auto flex items-end gap-2">
+                        <label className="block">
+                          <span className="block text-[13px] leading-[18px] text-tinta-suave">Precio unitario</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            aria-label={`Precio unitario de ${l.nombre}${l.tono ? `, ${l.tono}` : ""}`}
+                            className={PRECIO}
+                            value={precio}
+                            onChange={(e) =>
+                              setPreciosPedidoOverride({ ...preciosPedidoOverride, [l.id]: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <span className="flex min-h-11 min-w-20 items-center justify-end font-semibold tabular-nums">{pesos(precio * l.cantidad)}</span>
                       </span>
                     </li>
                   );

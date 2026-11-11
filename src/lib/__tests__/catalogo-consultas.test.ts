@@ -194,6 +194,115 @@ describe("obtenerProductos", () => {
   });
 });
 
+describe("obtenerProductos · relevancia de la búsqueda en «Recomendados»", () => {
+  const cepillo = () =>
+    fila("p-cep", "CP26E", null, {
+      nombre: "Cepillo térmico",
+      descripcion: "Da brillo al cabello",
+      imagen_principal: "cepillo.jpg",
+    });
+  const gloss = () => fila("p-gls", "GLS735", "c-espejos", { nombre: "Lip gloss Oil Glazed", imagen_principal: "gloss.jpg" });
+
+  it("«gloss» pone el «Lip gloss …» antes que un cepillo cuya descripción dice «brillo»", async () => {
+    usar(() => ({ data: [cepillo(), gloss()], error: null, count: 2 }));
+
+    const pagina = await obtenerProductos({ busqueda: "gloss" });
+
+    expect(pagina.productos.map((p) => p.referencia)).toEqual(["GLS735", "CP26E"]);
+    expect(pagina.total).toBe(2);
+    expect(llamadas(de("rpc:buscar_productos"), "range")).toEqual([[0, 239]]);
+  });
+
+  it("«usk621» deja USK-621 primero, antes de las que solo la contienen", async () => {
+    usar(() => ({
+      data: [
+        fila("p1", "USK-6210", null, { nombre: "Espejo", imagen_principal: "a.jpg" }),
+        fila("p2", "USK-621", null, { nombre: "Lip gloss gummy", imagen_principal: "b.jpg" }),
+      ],
+      error: null,
+      count: 2,
+    }));
+
+    const pagina = await obtenerProductos({ busqueda: "usk621" });
+    expect(pagina.productos.map((p) => p.referencia)).toEqual(["USK-621", "USK-6210"]);
+  });
+
+  it("ordena las coincidencias y después pagina en TS, con el total de la base", async () => {
+    // 30 coincidencias en el orden de la base: las 5 primeras solo por descripción.
+    const filas = Array.from({ length: 30 }, (_, i) =>
+      i < 5
+        ? fila(`d${i}`, `D-${i}`, null, { nombre: `Cepillo ${i}`, descripcion: "brillo", imagen_principal: "x.jpg" })
+        : fila(`g${i}`, `G-${i}`, null, { nombre: `Gloss ${i}`, imagen_principal: "x.jpg" })
+    );
+    usar(() => ({ data: filas, error: null, count: 30 }));
+
+    const segunda = await obtenerProductos({ busqueda: "gloss", pagina: 2 });
+    expect(segunda.productos.map((p) => p.referencia)).toEqual(["G-29", "D-0", "D-1", "D-2", "D-3", "D-4"]);
+    expect(segunda).toMatchObject({ total: 30, pagina: 2 });
+
+    usar(() => ({ data: filas, error: null, count: 30 }));
+    const hasta = await obtenerProductos({ busqueda: "gloss", pagina: 2, hastaPagina: true });
+    expect(hasta.productos).toHaveLength(30);
+    expect(hasta.productos[0].referencia).toBe("G-5");
+  });
+
+  it("dentro del mismo nivel, lo que no tiene foto va después", async () => {
+    usar(() => ({
+      data: [
+        fila("p1", "G-1", null, { nombre: "Gloss sin foto" }),
+        fila("p2", "G-2", null, { nombre: "Gloss con foto", imagen_principal: "f.jpg" }),
+      ],
+      error: null,
+      count: 2,
+    }));
+
+    const pagina = await obtenerProductos({ busqueda: "gloss" });
+    expect(pagina.productos.map((p) => p.referencia)).toEqual(["G-2", "G-1"]);
+  });
+
+  it.each(["precio-asc", "precio-desc", "nuevos"] as const)(
+    "con el orden «%s» la base pagina y el orden no cambia",
+    async (orden) => {
+      usar(() => ({ data: [cepillo(), gloss()], error: null, count: 26 }));
+
+      const pagina = await obtenerProductos({ busqueda: "gloss", orden, pagina: 2 });
+
+      expect(llamadas(de("rpc:buscar_productos"), "range")).toEqual([[24, 47]]);
+      expect(pagina.productos.map((p) => p.referencia)).toEqual(["CP26E", "GLS735"]);
+    }
+  );
+});
+
+describe("obtenerProductos · sin foto al final en «Recomendados»", () => {
+  const conFoto = (n: number) => fila(`p${n}`, `R-${n}`, null, { imagen_principal: `${n}.jpg` });
+  const sinFoto = (n: number) => fila(`p${n}`, `R-${n}`, null);
+
+  it("dentro de la página, los productos sin foto pasan al final sin desordenar el resto", async () => {
+    usar(() => ({ data: [sinFoto(0), conFoto(1), sinFoto(2), conFoto(3)], error: null, count: 4 }));
+
+    const pagina = await obtenerProductos({});
+    expect(pagina.productos.map((p) => p.referencia)).toEqual(["R-1", "R-3", "R-0", "R-2"]);
+  });
+
+  it("con varias páginas juntas, cada una se ordena por su cuenta (igual que al pedirlas de a una)", async () => {
+    const filas = Array.from({ length: 48 }, (_, i) => (i === 0 || i === 24 ? sinFoto(i) : conFoto(i)));
+    usar(() => ({ data: filas, error: null, count: 48 }));
+
+    const pagina = await obtenerProductos({ pagina: 2, hastaPagina: true });
+    const refs = pagina.productos.map((p) => p.referencia);
+    expect(refs[23]).toBe("R-0");
+    expect(refs[24]).toBe("R-25");
+    expect(refs[47]).toBe("R-24");
+  });
+
+  it("los órdenes por precio y «nuevos» no se tocan", async () => {
+    usar(() => ({ data: [sinFoto(0), conFoto(1)], error: null, count: 2 }));
+
+    const pagina = await obtenerProductos({ orden: "precio-asc" });
+    expect(pagina.productos.map((p) => p.referencia)).toEqual(["R-0", "R-1"]);
+  });
+});
+
 describe("obtenerSugerencias", () => {
   it("pone primero la referencia exacta, aunque se escriba sin guion", async () => {
     usar(() => ({
@@ -218,6 +327,23 @@ describe("obtenerSugerencias", () => {
       etiquetaVariante: "Tono",
     });
     expect(r.productos[1].etiquetaVariante).toBe("Color");
+  });
+
+  it("«gloss» sugiere primero el que lo lleva en el nombre y busca entre hasta 240 candidatos", async () => {
+    usar(() => ({
+      data: [
+        { referencia: "CP26E", nombre: "Cepillo térmico", imagen_principal: null, precio_base: 9000, num_tonos: 0, category_id: null, etiqueta_variante: null },
+        { referencia: "X-2", nombre: "Tono rosa", imagen_principal: null, precio_base: 9000, num_tonos: 0, category_id: "c-gloss", etiqueta_variante: null },
+        { referencia: "GLS735", nombre: "Lip gloss Oil Glazed", imagen_principal: null, precio_base: 8000, num_tonos: 6, category_id: "c-gloss", etiqueta_variante: null },
+      ],
+      error: null,
+      count: 3,
+    }));
+
+    const r = await obtenerSugerencias("gloss");
+
+    expect(r.productos.map((p) => p.referencia)).toEqual(["GLS735", "X-2", "CP26E"]);
+    expect(llamadas(de("rpc:buscar_productos"), "range")).toEqual([[0, 239]]);
   });
 
   it("devuelve como máximo 8", async () => {

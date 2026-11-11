@@ -86,3 +86,36 @@ export function gruposDeBusqueda(q: string): string[] {
 
   return [...grupos].slice(0, MAX_GRUPOS);
 }
+
+type CamposVisibles = {
+  nombre: string;
+  referencia: string;
+  categoria?: string | null;
+  departamento?: string | null;
+};
+
+/** Cada grupo tiene alguna alternativa en el texto o en la referencia compacta (como `buscar_productos`). */
+function cubreTodos(grupos: string[], texto: string, compacta: string): boolean {
+  return grupos.every((grupo) =>
+    grupo.split("|").some((a) => {
+      const alternativa = a.trim();
+      return alternativa !== "" && (texto.includes(alternativa) || compacta.includes(alternativa));
+    })
+  );
+}
+
+/**
+ * Relevancia de un producto que ya coincidió en la base: 0 si su referencia es lo buscado, 1 si todo está
+ * en el nombre o la referencia, 2 si hace falta su categoría o departamento, 3 si solo coincide por lo que
+ * la tarjeta no muestra (descripción, variantes).
+ */
+export function nivelDeCoincidencia(p: CamposVisibles, grupos: string[], q: string): 0 | 1 | 2 | 3 {
+  const compacta = compactarReferencia(p.referencia);
+  const buscada = compactarReferencia(q);
+  if (buscada !== "" && compacta === buscada) return 0;
+
+  const propio = normalizarTexto(`${p.nombre} ${p.referencia}`);
+  if (cubreTodos(grupos, propio, compacta)) return 1;
+  const conCategoria = normalizarTexto(`${propio} ${p.categoria ?? ""} ${p.departamento ?? ""}`);
+  return cubreTodos(grupos, conCategoria, compacta) ? 2 : 3;
+}

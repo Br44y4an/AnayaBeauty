@@ -11,9 +11,10 @@ import { rutaProducto } from "@/lib/rutas";
 import type { Escalon } from "@/lib/pricing";
 import type { Producto } from "@/lib/types";
 
-// Grilla de 2/3/4 columnas dentro de 1200 px; el riel usa teselas de 144–176 px.
+// Grilla de 2/3/4 columnas dentro de 1200 px; los rieles usan teselas de 144–176 px que en la ficha
+// llegan a 240 px (cuatro columnas desde 768).
 const TAMANOS_GRILLA = "(max-width: 767px) 50vw, (max-width: 1023px) 33vw, 288px";
-const TAMANOS_RIEL = "176px";
+const TAMANOS_RIEL = "(min-width: 768px) 240px, 176px";
 
 /**
  * La tarjeta ocupa 5 filas de la grilla (subgrid): nombre, precio y botón quedan alineados con los de
@@ -27,6 +28,8 @@ type Props = {
   indice?: number;
   /** Versión del riel: foto, nombre y precio; toda la tarjeta abre la ficha. */
   compacta?: boolean;
+  /** Dentro de la vista rápida: el salto reemplaza la entrada, así «Cerrar» vuelve al catálogo. */
+  replace?: boolean;
 };
 
 /** Precio de una unidad y el escalón siguiente, si se puede alcanzar con el stock. */
@@ -39,10 +42,17 @@ function preciosDeTarjeta(escalones: Escalon[], stock: number) {
   };
 }
 
-function TarjetaProductoBase({ producto, indice = Number.POSITIVE_INFINITY, compacta = false }: Props) {
+function TarjetaProductoBase({
+  producto,
+  indice = Number.POSITIVE_INFINITY,
+  compacta = false,
+  replace = false,
+}: Props) {
   const idNombre = useId();
   const precios = preciosDeTarjeta(producto.escalones, producto.stock);
   const agotado = producto.stock <= 0;
+  // Al reemplazar (salto dentro de la hoja) la página de atrás no se mueve.
+  const enlace = { href: rutaProducto(producto.referencia), replace, scroll: !replace };
 
   const foto = (
     <div className="relative aspect-square bg-superficie">
@@ -73,7 +83,7 @@ function TarjetaProductoBase({ producto, indice = Number.POSITIVE_INFINITY, comp
   if (compacta) {
     return (
       <article aria-labelledby={idNombre}>
-        <Link href={rutaProducto(producto.referencia)} className="block rounded-sm">
+        <Link {...enlace} className="block rounded-sm">
           {foto}
           <p id={idNombre} className="mt-2 line-clamp-2 min-h-10 text-sm font-medium leading-5 text-tinta">
             {producto.nombre}
@@ -91,7 +101,7 @@ function TarjetaProductoBase({ producto, indice = Number.POSITIVE_INFINITY, comp
   // Cinco hijos, siempre (aunque alguno vaya vacío): son las filas de CELDA_TARJETA.
   return (
     <article aria-labelledby={idNombre} className={CELDA_TARJETA}>
-      <Link href={rutaProducto(producto.referencia)} className="block rounded-sm">
+      <Link {...enlace} className="block rounded-sm">
         {foto}
         {producto.categoriaNombre && (
           <p className="mt-2.5 truncate text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-firma">

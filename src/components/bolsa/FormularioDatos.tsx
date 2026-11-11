@@ -57,7 +57,10 @@ type Props = {
 export function FormularioDatos({ valores, onCambiar, accion, items, adicional, error, whatsappNegocio }: Props) {
   const [notaAbierta, setNotaAbierta] = useState(valores.notas !== "");
   const nota = useRef<HTMLTextAreaElement>(null);
-  const errorDe = (campo: Obligatorio) => (error?.campo === campo ? error.mensaje : null);
+  // El error de un campo se retira en cuanto la clienta lo corrige; un envío nuevo trae otro objeto.
+  const [corregido, setCorregido] = useState<FalloConfirmacion | null>(null);
+  const vigente = error !== corregido ? error : null;
+  const errorDe = (campo: Obligatorio) => (vigente?.campo === campo ? vigente.mensaje : null);
   const errorGeneral = error && (!error.campo || error.campo === "bolsa") ? error : null;
 
   // «Siguiente» en el teclado del celular pasa de campo; nunca confirma el pedido por accidente.
@@ -79,7 +82,10 @@ export function FormularioDatos({ valores, onCambiar, accion, items, adicional, 
     id: idDe(c),
     name: c,
     value: valores[c],
-    onChange: (e: ChangeEvent<HTMLInputElement>) => onCambiar({ [c]: e.target.value }),
+    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+      if (error?.campo === c) setCorregido(error);
+      onCambiar({ [c]: e.target.value });
+    },
     error: errorDe(c),
     required: true,
   });
@@ -167,7 +173,7 @@ export function FormularioDatos({ valores, onCambiar, accion, items, adicional, 
       <div className="mt-5 space-y-2 text-[13px] leading-[18px] text-tinta-suave">
         <p>
           Al confirmar aceptas que usemos tus datos solo para gestionar tu pedido.{" "}
-          <a href="/privacidad" target="_blank" className="font-semibold text-tinta underline underline-offset-2">
+          <a href="/privacidad" target="_blank" rel="noopener" className="font-semibold text-tinta underline underline-offset-2">
             Política de privacidad
           </a>
           .
@@ -177,7 +183,7 @@ export function FormularioDatos({ valores, onCambiar, accion, items, adicional, 
 
       {/* Siempre presente: así el lector anuncia el error apenas aparece. */}
       <div id="error-pedido" role="alert" className="scroll-mb-28">
-        {error && !errorGeneral && <p className="sr-only">{error.mensaje}</p>}
+        {vigente && !errorGeneral && <p className="sr-only">{vigente.mensaje}</p>}
         {errorGeneral && (
           <div className="mt-5 rounded-md bg-error-fondo p-3 text-sm leading-5 text-error">
             <p className="flex items-start gap-2">

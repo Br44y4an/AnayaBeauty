@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { IconoMas, IconoMenos } from "@/components/ui/Iconos";
 
 type Props = {
@@ -9,12 +10,17 @@ type Props = {
   tamano?: "compacto" | "normal";
   deshabilitado?: boolean;
   className?: string;
+  /** El «+»: quien cambia un botón por este stepper le pasa el foco aquí. */
+  refMas?: Ref<HTMLButtonElement>;
 };
 
 const BOTON =
-  "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-tinta " +
-  "transition-colors duration-150 hover:bg-superficie active:bg-superficie " +
-  "disabled:cursor-not-allowed disabled:bg-inactivo disabled:text-tinta-suave";
+  "flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent " +
+  "text-tinta transition-colors duration-150 not-disabled:hover:bg-superficie not-disabled:active:bg-superficie " +
+  "disabled:cursor-not-allowed disabled:text-tinta-suave";
+
+// En las listas de variantes casi todo está en 0: un fondo gris en cada «−» las llenaba de cuadros.
+const INACTIVO = { normal: "disabled:bg-inactivo", compacto: "disabled:border-linea" } as const;
 
 /** − cantidad +, con botones de 44 px. `etiqueta` nombra la variante: «Agregar uno de Tono 3». */
 export function Stepper({
@@ -26,9 +32,11 @@ export function Stepper({
   tamano = "normal",
   deshabilitado = false,
   className = "",
+  refMas,
 }: Props) {
   const puedeQuitar = !deshabilitado && valor > min;
   const puedeAgregar = !deshabilitado && valor < max;
+  const boton = `${BOTON} ${INACTIVO[tamano]}`;
 
   return (
     <div
@@ -41,7 +49,7 @@ export function Stepper({
         aria-label={`Quitar uno de ${etiqueta}`}
         disabled={!puedeQuitar}
         onClick={() => onCambiar(Math.max(min, valor - 1))}
-        className={BOTON}
+        className={boton}
       >
         <IconoMenos tamano={20} />
       </button>
@@ -54,11 +62,12 @@ export function Stepper({
         {valor}
       </output>
       <button
+        ref={refMas}
         type="button"
         aria-label={`Agregar uno de ${etiqueta}`}
         disabled={!puedeAgregar}
         onClick={() => onCambiar(Math.min(max, valor + 1))}
-        className={BOTON}
+        className={boton}
       >
         <IconoMas tamano={20} />
       </button>

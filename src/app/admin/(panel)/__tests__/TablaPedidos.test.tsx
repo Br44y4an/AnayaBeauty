@@ -84,6 +84,24 @@ describe("TablaPedidos", () => {
     expect(screen.queryByRole("button", { name: "Deshacer" })).toBeNull();
   });
 
+  it("un doble toque en «Sí, cancelar pedido» hace una sola petición y un solo aviso, y el foco vuelve a la tarjeta", async () => {
+    let terminar: (r: { ok: true }) => void = () => {};
+    prueba.cambiar.mockReturnValue(new Promise((res) => (terminar = res)));
+    pintar([pedido(A)]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    const si = screen.getByRole("button", { name: "Sí, cancelar pedido" });
+    fireEvent.click(si);
+    fireEvent.click(si);
+    expect(prueba.cambiar).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Sí, cancelar pedido" })).toHaveAttribute("aria-busy", "true");
+
+    await act(async () => terminar({ ok: true }));
+    await waitFor(() => expect(screen.getAllByText("Pedido cancelado")).toHaveLength(1));
+    expect(prueba.cambiar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole("article", { name: "AB-0098" })).toHaveFocus());
+  });
+
   it("si la base lo rechaza, el error queda en la tarjeta de ese pedido", async () => {
     prueba.cambiar.mockResolvedValue({ ok: false, error: "Este pedido ya no existe." });
     pintar([pedido(A), pedido(B)]);

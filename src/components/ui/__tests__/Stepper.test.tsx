@@ -63,4 +63,19 @@ describe("Stepper", () => {
     expect(clases).toContain("disabled:bg-inactivo");
     expect(clases).toContain("disabled:text-tinta-suave");
   });
+
+  // Con 36 tonos en 0, un fondo gris en cada «−» llenaba la lista de cuadros.
+  it("compacto: el «−» en 0 va sin fondo, con borde de color línea e icono tinta-suave, sin opacidad", () => {
+    render(<Stepper valor={0} max={5} onCambiar={() => {}} etiqueta="Tono 3" tamano="compacto" />);
+
+    const quitar = screen.getByRole("button", { name: "Quitar uno de Tono 3" });
+    expect(quitar).toBeDisabled();
+    const clases = quitar.className.split(/\s+/);
+    expect(clases.filter((clase) => clase.includes("opacity-") || clase.includes("bg-inactivo"))).toEqual([]);
+    expect(clases.filter((clase) => clase.startsWith("disabled:bg-"))).toEqual([]);
+    expect(clases).toContain("disabled:border-linea");
+    expect(clases).toContain("disabled:text-tinta-suave");
+    // El fondo al pasar el puntero o presionar es solo para el botón activo.
+    expect(clases.filter((clase) => /^(hover|active):bg-/.test(clase))).toEqual([]);
+  });
 });

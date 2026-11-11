@@ -49,7 +49,7 @@ export function mensajeCobro(p: Pedido, pago: ConfiguracionPublica["pago"]): str
     mensajeContacto(p),
     `Total: ${pesos(p.total)}.`,
     comoPagar,
-    "Cuando pagues, envíanos el comprobante por aquí.",
+    "Cuando pagues, envíame el comprobante por aquí.",
   ].join("\n");
 }
 

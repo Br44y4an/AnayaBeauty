@@ -204,6 +204,8 @@ export async function guardarProducto(datos: FormData): Promise<Resultado<{ id: 
   if (fallo) {
     // Uno nuevo se deshace entero para que volver a intentar no choque con su propia referencia.
     if (!p.id) await supabase.from("products").delete().eq("id", productoId);
+    // Una escritura parcial ya cambió algo del catálogo: la tienda no debe seguir mostrando lo anterior.
+    invalidarCatalogo();
     return fallo;
   }
 

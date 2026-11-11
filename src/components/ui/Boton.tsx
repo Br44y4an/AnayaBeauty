@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ButtonHTMLAttributes, ComponentProps } from "react";
+import type { ButtonHTMLAttributes, ComponentProps, Ref } from "react";
 import { Giro } from "@/components/ui/Giro";
 
 export type VarianteBoton = "primario" | "secundario" | "contorno" | "fantasma" | "peligro";
@@ -52,7 +52,7 @@ export function Boton({
   children,
   disabled,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & Apariencia & { cargando?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & Apariencia & { cargando?: boolean; ref?: Ref<HTMLButtonElement> }) {
   return (
     <button
       {...props}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Boton } from "@/components/ui/Boton";
 import { Hoja } from "@/components/ui/Hoja";
 import { mostrarAviso } from "@/lib/avisos";
@@ -25,9 +25,17 @@ export function TablaPedidos({ pedidos, pago }: { pedidos: Pedido[]; pago: Confi
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [porCancelar, setPorCancelar] = useState<Pedido | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  // Un doble toque en «Sí, cancelar pedido» llega antes de que React pinte el botón en carga.
+  const cancelando = useRef(false);
+  const [cancelandoVisible, setCancelandoVisible] = useState(false);
 
   // `deshaciendo`: las correcciones (pagado → nuevo, enviado → pagado) no ofrecen otro «Deshacer».
-  function cambiar(p: Pick<Pedido, "id" | "numeroPedido" | "estado">, destino: EstadoPedido, deshaciendo = false) {
+  function cambiar(
+    p: Pick<Pedido, "id" | "numeroPedido" | "estado">,
+    destino: EstadoPedido,
+    deshaciendo = false,
+    alTerminar?: () => void
+  ) {
     setGuardando({ id: p.id, destino });
     setErrores(({ [p.id]: _, ...resto }) => resto);
 
@@ -40,6 +48,7 @@ export function TablaPedidos({ pedidos, pago }: { pedidos: Pedido[]; pago: Confi
       };
       if (!resultado.ok) {
         setErrores((previos) => ({ ...previos, [p.id]: resultado.error }));
+        alTerminar?.();
         return;
       }
 
@@ -58,6 +67,7 @@ export function TablaPedidos({ pedidos, pago }: { pedidos: Pedido[]; pago: Confi
                 alHacer: () => cambiar({ ...p, estado: destino }, previo, true),
               },
       });
+      alTerminar?.();
     });
   }
 
@@ -67,8 +77,21 @@ export function TablaPedidos({ pedidos, pago }: { pedidos: Pedido[]; pago: Confi
   }
 
   function confirmarCancelacion() {
-    setConfirmando(false);
-    if (porCancelar) cambiar(porCancelar, "cancelado");
+    if (cancelando.current || !porCancelar) return;
+    cancelando.current = true;
+    setCancelandoVisible(true);
+    const { id } = porCancelar;
+    cambiar(porCancelar, "cancelado", false, () => {
+      cancelando.current = false;
+      setCancelandoVisible(false);
+      setConfirmando(false);
+      // El botón «Cancelar» ya no existe: el foco vuelve a la tarjeta, no se pierde en el documento.
+      setTimeout(() => document.getElementById(`tarjeta-${id}`)?.focus({ preventScroll: true }), 0);
+    });
+  }
+
+  function cerrarConfirmacion() {
+    if (!cancelando.current) setConfirmando(false);
   }
 
   const unidadesPorCancelar = porCancelar?.lineas.reduce((suma, l) => suma + l.cantidad, 0) ?? 0;
@@ -94,14 +117,14 @@ export function TablaPedidos({ pedidos, pago }: { pedidos: Pedido[]; pago: Confi
 
       <Hoja
         abierta={confirmando}
-        alCerrar={() => setConfirmando(false)}
+        alCerrar={cerrarConfirmacion}
         titulo={`¿Cancelar el pedido ${porCancelar?.numeroPedido ?? ""}?`}
         pie={
           <div className="grid gap-2 sm:grid-cols-2">
-            <Boton type="button" variante="peligro" onClick={confirmarCancelacion}>
+            <Boton type="button" variante="peligro" cargando={cancelandoVisible} onClick={confirmarCancelacion}>
               Sí, cancelar pedido
             </Boton>
-            <Boton type="button" variante="secundario" data-autofocus onClick={() => setConfirmando(false)}>
+            <Boton type="button" variante="secundario" data-autofocus disabled={cancelandoVisible} onClick={cerrarConfirmacion}>
               No, dejarlo así
             </Boton>
           </div>

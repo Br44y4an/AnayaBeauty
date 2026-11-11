@@ -46,7 +46,14 @@ describe("TarjetaPago", () => {
     expect(screen.getByText("Transfiere $45.000 por Nequi")).toBeInTheDocument();
     expect(screen.getByText("300 765 4321")).toBeInTheDocument();
     expect(screen.getByText("Titular: Anaya Beauty")).toBeInTheDocument();
-    expect(screen.getByText(`Envío: ${ENVIO}`)).toBeInTheDocument();
+  });
+
+  it("el envío va con su etiqueta aparte, sin repetir «Envío: El envío…»", () => {
+    montar();
+
+    const envio = screen.getByText("Envío", { selector: "dt" });
+    expect(envio.nextElementSibling).toHaveTextContent(ENVIO);
+    expect(screen.queryByText(/Envío: /)).not.toBeInTheDocument();
   });
 
   it("copia el número de pago y el valor sin puntos", async () => {
@@ -54,7 +61,7 @@ describe("TarjetaPago", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: escribir }, configurable: true });
     montar();
 
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copiar" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copiar número" })));
     expect(escribir).toHaveBeenLastCalledWith("300 765 4321");
     expect(screen.getAllByText("Copiado").length).toBeGreaterThan(0);
 

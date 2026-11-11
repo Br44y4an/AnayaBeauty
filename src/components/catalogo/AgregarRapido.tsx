@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { Boton, BotonEnlace } from "@/components/ui/Boton";
 import { IconoCheck } from "@/components/ui/Iconos";
 import { Insignia } from "@/components/ui/Insignia";
@@ -25,6 +26,9 @@ export function AgregarRapido({ producto, idNombre }: { producto: Producto; idNo
   const establecer = useCarrito((e) => e.establecer);
   const quitar = useCarrito((e) => e.quitar);
   const restaurar = useCarrito((e) => e.restaurar);
+  // El botón que se toca desaparece (Agregar ↔ stepper): el foco pasa al control que ocupa su lugar.
+  const refAgregar = useRef<HTMLButtonElement>(null);
+  const refMas = useRef<HTMLButtonElement>(null);
 
   const enBolsa = lineas.reduce((suma, l) => suma + l.cantidad, 0);
   const linea = lineas.find((l) => l.tonoId === null) ?? null;
@@ -33,7 +37,10 @@ export function AgregarRapido({ producto, idNombre }: { producto: Producto; idNo
 
   function agregarUna() {
     if (compra(1).bloqueo) return;
-    agregar(producto.id, 1, null);
+    flushSync(() => agregar(producto.id, 1, null));
+    const mas = refMas.current;
+    // Si esa era la última unidad, el «+» queda inactivo y el foco va al «−».
+    (mas?.disabled ? mas.parentElement?.querySelector<HTMLButtonElement>("button:enabled") : mas)?.focus();
     vibrar();
     mostrarAviso({
       titulo: "Agregado a tu bolsa",
@@ -52,7 +59,8 @@ export function AgregarRapido({ producto, idNombre }: { producto: Producto; idNo
     const indice = todas.findIndex((l) => l.productoId === producto.id && l.tonoId === null);
     if (indice < 0) return;
     const quitada = todas[indice];
-    quitar(producto.id, null);
+    flushSync(() => quitar(producto.id, null));
+    refAgregar.current?.focus();
     mostrarAviso({
       titulo: "Quitado de tu bolsa",
       detalle: `${quitada.cantidad} × ${producto.nombre}`,
@@ -83,11 +91,13 @@ export function AgregarRapido({ producto, idNombre }: { producto: Producto; idNo
         etiqueta={producto.nombre}
         tamano="compacto"
         className="w-full"
+        refMas={refMas}
       />
     );
   } else {
     accion = (
       <Boton
+        ref={refAgregar}
         variante="contorno"
         tamano="compacto"
         ancho

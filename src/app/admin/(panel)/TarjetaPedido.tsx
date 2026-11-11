@@ -66,8 +66,10 @@ export function TarjetaPedido({
 
   return (
     <article
+      id={`tarjeta-${p.id}`}
+      tabIndex={-1}
       aria-labelledby={idTitulo}
-      className={`rounded-md border p-4 ${recienLlegado ? "border-tinta" : "border-linea"}`}
+      className={`rounded-md border p-4 outline-none ${recienLlegado ? "border-tinta" : "border-linea"}`}
     >
       <header className="flex items-start justify-between gap-3">
         <div>

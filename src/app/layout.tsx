@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Figtree } from "next/font/google";
+import { urlSitio } from "@/lib/sitio";
 import "./globals.css";
 
 const figtree = Figtree({
@@ -9,16 +10,8 @@ const figtree = Figtree({
   display: "swap",
 });
 
-function urlDelSitio(): URL | undefined {
-  try {
-    return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "");
-  } catch {
-    return undefined;
-  }
-}
-
 export const metadata: Metadata = {
-  metadataBase: urlDelSitio(),
+  metadataBase: new URL(urlSitio()),
   title: {
     default: "Anaya Beauty — Maquillaje y accesorios",
     template: "%s · Anaya Beauty",

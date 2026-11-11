@@ -53,7 +53,7 @@ function enOrden(a: LineaPedido, b: LineaPedido): number {
   return orden.compare(a.referencia, b.referencia) || orden.compare(a.tono ?? "", b.tono ?? "");
 }
 
-function mapearPedido(fila: FilaPedido): Pedido {
+export function mapearPedido(fila: FilaPedido): Pedido {
   const descuento = fila.descuento ?? 0;
   return {
     id: fila.id,

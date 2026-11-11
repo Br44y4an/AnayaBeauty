@@ -30,15 +30,13 @@ export function mensajeAmable(
           "Recibimos varios pedidos desde este celular en pocos minutos. " +
           "Espera 10 minutos o escríbenos por WhatsApp.",
       };
-    case "SIN_STOCK":
-      return {
-        campo: "bolsa",
-        mensaje: !nombre
-          ? "Algo de tu bolsa se agotó. Revísala y confirma de nuevo."
-          : cantidad
-            ? `De ${nombre} solo quedan ${cantidad}. Ajusta la cantidad y confirma de nuevo.`
-            : `De ${nombre} no quedan suficientes unidades. Ajusta la cantidad y confirma de nuevo.`,
-      };
+    case "SIN_STOCK": {
+      let mensaje = `De ${nombre} no quedan suficientes unidades. Ajusta la cantidad y confirma de nuevo.`;
+      if (!nombre) mensaje = "Algo de tu bolsa se agotó. Revísala y confirma de nuevo.";
+      else if (cantidad && Number(cantidad) <= 0) mensaje = `${nombre} se agotó. Quítalo de tu bolsa y confirma de nuevo.`;
+      else if (cantidad) mensaje = `De ${nombre} solo quedan ${cantidad}. Ajusta la cantidad y confirma de nuevo.`;
+      return { campo: "bolsa", mensaje };
+    }
     case "PRODUCTO_NO_DISPONIBLE":
       return {
         campo: "bolsa",

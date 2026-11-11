@@ -6,12 +6,10 @@ import { useBloquearScroll } from "@/hooks/useBloquearScroll";
 import { usePresencia } from "@/hooks/usePresencia";
 
 type Props = {
-  /** Por defecto true: así funciona también montada y desmontada desde fuera (uso de la v4). */
-  abierta?: boolean;
+  abierta: boolean;
   alCerrar: () => void;
   titulo: string;
   tituloVisible?: boolean;
-  descripcion?: ReactNode;
   pie?: ReactNode;
   children: ReactNode;
   ancho?: "normal" | "amplio";
@@ -24,11 +22,10 @@ const ENFOCABLES =
 // Diálogo modal: sube desde abajo en el celular y se centra desde 768 px. Atrapa el tabulador, cierra con
 // Escape y devuelve el foco a quien la abrió. El foco inicial va a `[data-autofocus]` o, si no hay, al panel.
 export function Hoja({
-  abierta = true,
+  abierta,
   alCerrar,
   titulo,
   tituloVisible = true,
-  descripcion,
   pie,
   children,
   ancho = "normal",
@@ -94,12 +91,12 @@ export function Hoja({
               : "absolute right-2 top-2 z-10"
           }
         >
-          <div className={tituloVisible ? "min-w-0 flex-1" : "sr-only"}>
-            <h2 id={idTitulo} className="text-xl font-semibold leading-[26px] text-tinta">
-              {titulo}
-            </h2>
-            {descripcion && <div className="mt-0.5 text-sm text-tinta-suave">{descripcion}</div>}
-          </div>
+          <h2
+            id={idTitulo}
+            className={tituloVisible ? "min-w-0 flex-1 text-xl font-semibold leading-[26px] text-tinta" : "sr-only"}
+          >
+            {titulo}
+          </h2>
           <button
             type="button"
             onClick={cerrar}

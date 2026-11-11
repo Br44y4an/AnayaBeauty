@@ -3,7 +3,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { clientePublico } from "@/lib/supabase/publico";
 import { ETIQUETA, VERSION_DATOS } from "@/lib/data/etiquetas";
-import { compactarReferencia, gruposDeBusqueda } from "@/lib/data/busqueda";
+import { gruposDeBusqueda, nivelDeCoincidencia } from "@/lib/data/busqueda";
 import { falla } from "@/lib/data/errores";
 import { departamentoDe, idsDeCategoria } from "@/lib/categorias";
 import { ordenDeParametro } from "@/lib/rutas";
@@ -25,7 +25,8 @@ import type {
 export const POR_PAGINA = 24;
 const PAGINA_MAXIMA = 10;
 const LARGO_MAXIMO_BUSQUEDA = 80;
-const CANDIDATOS_SUGERENCIA = 40;
+// Lo más que se puede ver (10 páginas de 24): con búsqueda en «Recomendados» se ordena por relevancia en TS.
+const MAXIMO_RELEVANCIA = PAGINA_MAXIMA * POR_PAGINA;
 const REVALIDAR = 300;
 
 const CAMPOS_GRILLA = `
@@ -190,6 +191,41 @@ function ordenar<T extends Ordenable<T>>(consulta: T, orden: OrdenCatalogo): T {
   return ordenada.order("id", { ascending: true });
 }
 
+/** Estable: entre dos con la misma clave queda el orden de la base. */
+function ordenarPorClave<T>(lista: T[], clave: (t: T) => number): T[] {
+  return lista
+    .map((t, i) => ({ t, i, k: clave(t) }))
+    .sort((a, b) => a.k - b.k || a.i - b.i)
+    .map(({ t }) => t);
+}
+
+const sinFoto = (p: Producto) => (p.imagenPrincipal ? 0 : 1);
+
+/** Lo que la clienta ve del producto (nombre, referencia, categoría, departamento) para medir la relevancia. */
+function nivel(
+  p: { nombre: string; referencia: string; categoriaId: string | null },
+  categorias: Categoria[],
+  grupos: string[],
+  q: string
+) {
+  const campos = {
+    nombre: p.nombre,
+    referencia: p.referencia,
+    categoria: categorias.find((c) => c.id === p.categoriaId)?.nombre ?? null,
+    departamento: departamentoDe(p.categoriaId, categorias)?.nombre ?? null,
+  };
+  return nivelDeCoincidencia(campos, grupos, q);
+}
+
+/** En cada página de «Recomendados», lo que no tiene foto va al final. `productos` empieza en una página. */
+function sinFotoAlFinal(productos: Producto[]): Producto[] {
+  const resultado: Producto[] = [];
+  for (let i = 0; i < productos.length; i += POR_PAGINA) {
+    resultado.push(...ordenarPorClave(productos.slice(i, i + POR_PAGINA), sinFoto));
+  }
+  return resultado;
+}
+
 type Filtros = {
   categoriaSlug: string | null;
   busqueda: string;
@@ -210,6 +246,7 @@ async function consultarPagina(f: Filtros): Promise<PaginaProductos> {
   const supabase = clientePublico();
   const desde = f.hastaPagina ? 0 : (f.pagina - 1) * POR_PAGINA;
   const hasta = f.pagina * POR_PAGINA - 1;
+  const porRelevancia = grupos.length > 0 && f.orden === "destacados";
 
   const consulta = grupos.length
     ? ordenar(
@@ -225,7 +262,9 @@ async function consultarPagina(f: Filtros): Promise<PaginaProductos> {
         f.orden
       );
 
-  const { data, error, count } = await consulta.range(desde, hasta);
+  const { data, error, count } = await (porRelevancia
+    ? consulta.range(0, MAXIMO_RELEVANCIA - 1)
+    : consulta.range(desde, hasta));
 
   // PGRST103: se pidió una página después de la última (el catálogo se encogió).
   if (error?.code === "PGRST103") return { ...vacia, total: desde };
@@ -234,7 +273,16 @@ async function consultarPagina(f: Filtros): Promise<PaginaProductos> {
   // Sin tipos generados, `rpc().select()` se tipa como «fila o lista»: siempre es lista.
   const filas: FilaProducto[] = Array.isArray(data) ? data : [];
   const productos = filas.map((fila) => mapearProducto(fila, categorias));
-  return { productos, total: count ?? productos.length, pagina: f.pagina, porPagina: POR_PAGINA };
+  const total = count ?? productos.length;
+
+  if (porRelevancia) {
+    // Primero el nivel de coincidencia y, dentro de cada nivel, lo que tiene foto.
+    const clave = (p: Producto) => nivel(p, categorias, grupos, f.busqueda) * 2 + sinFoto(p);
+    const pagina = ordenarPorClave(productos, clave).slice(desde, hasta + 1);
+    return { productos: pagina, total, pagina: f.pagina, porPagina: POR_PAGINA };
+  }
+  const ordenados = f.orden === "destacados" ? sinFotoAlFinal(productos) : productos;
+  return { productos: ordenados, total, pagina: f.pagina, porPagina: POR_PAGINA };
 }
 
 const paginaEnCache = unstable_cache(consultarPagina, ["productos", VERSION_DATOS], {
@@ -349,7 +397,7 @@ export function obtenerRelacionados(p: Producto, limite = 8): Promise<Producto[]
   return relacionadosEnCache(p.id, p.categoriaId, Math.min(24, Math.max(1, Math.floor(limite))));
 }
 
-/** Hasta `limite` sugerencias con la referencia exacta primero, y cuántas hay en total. */
+/** Hasta `limite` sugerencias por relevancia (la referencia exacta primero), y cuántas hay en total. */
 export async function obtenerSugerencias(
   q: string,
   limite = 8
@@ -365,17 +413,17 @@ export async function obtenerSugerencias(
       .select(CAMPOS_SUGERENCIA)
       .order("orden")
       .order("id")
-      .range(0, CANDIDATOS_SUGERENCIA - 1),
+      .range(0, MAXIMO_RELEVANCIA - 1),
   ]);
 
   if (error) falla("catalogo", "No se pudieron cargar las sugerencias", error);
   const filas: FilaSugerencia[] = Array.isArray(data) ? data : [];
-  const buscada = compactarReferencia(texto);
-  const esExacta = (f: FilaSugerencia) => compactarReferencia(f.referencia) === buscada;
+  const clave = (f: FilaSugerencia) =>
+    nivel({ nombre: f.nombre, referencia: f.referencia, categoriaId: f.category_id }, categorias, grupos, texto);
 
   return {
     total: count ?? filas.length,
-    productos: [...filas.filter(esExacta), ...filas.filter((f) => !esExacta(f))]
+    productos: ordenarPorClave(filas, clave)
       .slice(0, Math.max(1, limite))
       .map((f) => ({
         referencia: f.referencia,

@@ -1,20 +1,16 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { clientePublico } from "@/lib/supabase/publico";
+import { falla } from "@/lib/data/errores";
 import { ETIQUETA, VERSION_DATOS } from "@/lib/data/etiquetas";
 import { normalizarWhatsapp, WHATSAPP_RESPALDO } from "@/lib/whatsapp";
 import type { ReglaDescuento } from "@/lib/discounts";
 import type { ConfiguracionPublica } from "@/lib/types";
 
 const UMBRAL_POR_DEFECTO = 200000;
-const ENVIO_POR_DEFECTO = "El envío se coordina por WhatsApp después de confirmar tu pedido.";
+export const ENVIO_POR_DEFECTO = "El envío se coordina por WhatsApp después de confirmar tu pedido.";
 
 type FilaAjuste = { clave: string; valor: string | null };
-
-function falla(mensaje: string, error: { message: string }): never {
-  console.error(`[config] ${mensaje}:`, error);
-  throw new Error(`${mensaje}.`);
-}
 
 /** Un ajuste vacío o ausente nunca llega a la pantalla como «undefined». */
 export function mapearConfiguracion(filas: FilaAjuste[]): ConfiguracionPublica {
@@ -42,7 +38,7 @@ async function leerAjustes(): Promise<FilaAjuste[]> {
     .eq("publico", true)
     .overrideTypes<FilaAjuste[], { merge: false }>();
 
-  if (error) falla("No se pudo cargar la configuración", error);
+  if (error) falla("config", "No se pudo cargar la configuración", error);
   return data ?? [];
 }
 
@@ -54,7 +50,7 @@ async function leerReglas(): Promise<ReglaDescuento[]> {
     .order("monto_minimo", { ascending: false })
     .overrideTypes<{ monto_minimo: number; porcentaje: number }[], { merge: false }>();
 
-  if (error) falla("No se pudieron cargar las reglas de descuento", error);
+  if (error) falla("config", "No se pudieron cargar las reglas de descuento", error);
   return (data ?? []).map((r) => ({ montoMinimo: r.monto_minimo, porcentaje: r.porcentaje }));
 }
 

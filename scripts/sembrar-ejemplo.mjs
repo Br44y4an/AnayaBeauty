@@ -1,8 +1,6 @@
 /**
  * Carga productos de ejemplo para desarrollo.
  * Uso: node --env-file=.env.local scripts/sembrar-ejemplo.mjs
- *
- * Es seguro volver a ejecutarlo: actualiza en vez de duplicar.
  */
 import { createClient } from "@supabase/supabase-js";
 

@@ -13,14 +13,14 @@ function esqueletosEn(carpetas: string[]): string[] {
 }
 
 describe("ficha de producto: 404 real para un producto inexistente", () => {
-  it("la ficha y las carpetas que la contienen (salvo (tienda)/) no tienen loading", () => {
+  it("ni la ficha ni las carpetas que la contienen tienen loading", () => {
     expect(existsSync(path.join(APP, "(tienda)/producto/[referencia]/page.tsx"))).toBe(true);
-    expect(esqueletosEn(["", "(tienda)/producto", "(tienda)/producto/[referencia]"])).toEqual([]);
+    expect(esqueletosEn(["", "(tienda)", "(tienda)/producto", "(tienda)/producto/[referencia]"])).toEqual([]);
   });
 
-  // Pendiente de la integración: hoy (tienda)/loading.tsx (esqueleto del catálogo) envuelve /producto.
-  // Al moverlo con la página a (tienda)/(catalogo)/, esta prueba empieza a fallar: cambia it.fails por it.
-  it.fails("tampoco (tienda)/ tiene loading (mover el catálogo a (tienda)/(catalogo)/)", () => {
-    expect(esqueletosEn(["(tienda)"])).toEqual([]);
+  it("el esqueleto del catálogo vive con su página en (tienda)/(catalogo)/, que sigue siendo «/»", () => {
+    expect(existsSync(path.join(APP, "(tienda)/(catalogo)/page.tsx"))).toBe(true);
+    expect(esqueletosEn(["(tienda)/(catalogo)"])).toEqual([path.join("(tienda)/(catalogo)", "loading.tsx")]);
+    expect(existsSync(path.join(APP, "(tienda)/page.tsx"))).toBe(false);
   });
 });

@@ -125,6 +125,34 @@ describe("FormularioDatos", () => {
     expect(useCarrito.getState().lineas).toHaveLength(1);
   });
 
+  it("el error de un campo se va en cuanto la clienta lo corrige", async () => {
+    servidor.confirmarPedido.mockResolvedValue({ ok: false, campo: "whatsapp", mensaje: "Revisa el número de WhatsApp." });
+    render(<Prueba />);
+    escribir();
+    enviar();
+    const whatsapp = screen.getByLabelText("WhatsApp");
+    await waitFor(() => expect(whatsapp).toHaveAccessibleDescription(/Revisa el número de WhatsApp/));
+    expect(whatsapp).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(whatsapp, { target: { value: "300 123 45678" } });
+
+    expect(whatsapp).not.toHaveAccessibleDescription(/Revisa el número/);
+    expect(whatsapp).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByText("Revisa el número de WhatsApp.")).not.toBeInTheDocument();
+  });
+
+  it("corregir otro campo no borra el error del que lo tiene", async () => {
+    servidor.confirmarPedido.mockResolvedValue({ ok: false, campo: "whatsapp", mensaje: "Revisa el número de WhatsApp." });
+    render(<Prueba />);
+    escribir();
+    enviar();
+    await waitFor(() => expect(screen.getByLabelText("WhatsApp")).toHaveAttribute("aria-invalid", "true"));
+
+    fireEvent.change(screen.getByLabelText("Ciudad"), { target: { value: "Cali" } });
+
+    expect(screen.getByLabelText("WhatsApp")).toHaveAccessibleDescription(/Revisa el número de WhatsApp/);
+  });
+
   it("si la conexión falla, lo dice y la bolsa sigue intacta", async () => {
     servidor.confirmarPedido.mockRejectedValue(new Error("Failed to fetch"));
     render(<Prueba />);
@@ -165,7 +193,10 @@ describe("FormularioDatos", () => {
     expect(
       screen.getByText(/Al confirmar aceptas que usemos tus datos solo para gestionar tu pedido/)
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Política de privacidad" })).toHaveAttribute("href", "/privacidad");
+    const politica = screen.getByRole("link", { name: "Política de privacidad" });
+    expect(politica).toHaveAttribute("href", "/privacidad");
+    expect(politica).toHaveAttribute("target", "_blank");
+    expect(politica).toHaveAttribute("rel", "noopener");
     expect(
       screen.getByText("Aquí no pagas nada todavía: después de confirmar te mostramos cómo pagar.")
     ).toBeInTheDocument();

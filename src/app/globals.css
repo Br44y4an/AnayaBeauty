@@ -20,34 +20,12 @@
   --color-error-fondo: #fef3f2;
   --color-inactivo: #e9e3e6;
 
-  /* Alias temporales para el código que aún no migra; la integración los borra. */
-  --color-fucsia: var(--color-acento);
-  --color-fucsia-texto: var(--color-acento);
-  --color-fucsia-vivo: var(--color-acento);
-  --color-fucsia-hondo: var(--color-acento-hondo);
-  --color-fucsia-suave: #f3c9dc;
-  --color-lila: var(--color-firma);
-  --color-lila-texto: var(--color-firma);
-  --color-lila-vivo: var(--color-firma);
-  --color-lila-suave: var(--color-linea);
-  --color-rosa-nube: var(--color-superficie);
-  --color-petalo: var(--color-fondo);
-  --color-carbon: var(--color-tinta);
-  --color-carbon-suave: var(--color-tinta-suave);
-  --color-exito: var(--color-ahorro);
-  --color-exito-fondo: var(--color-ahorro-fondo);
-
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 16px;
-  --radius-suave: var(--radius-md);
-  --radius-tarjeta: var(--radius-md);
-  --radius-pastilla: var(--radius-md);
 
   --shadow-flotante: 0 6px 20px rgb(38 28 34 / 0.18);
   --shadow-hoja: 0 -8px 32px rgb(38 28 34 / 0.18);
-  /* Alias de «none»: una sombra vacía no anula el anillo de foco que comparte box-shadow. */
-  --shadow-petalo: 0 0 #0000;
 
   --ease-entrada: cubic-bezier(0.2, 0, 0, 1);
   --ease-salida: cubic-bezier(0.4, 0, 1, 1);
@@ -94,7 +72,6 @@
 /* inline: la variable de next/font vive en <html>, así que cada utilidad la usa directamente. */
 @theme inline {
   --font-sans: var(--fuente-figtree), system-ui, sans-serif;
-  --font-display: var(--fuente-figtree), system-ui, sans-serif;
 }
 
 @layer base {
@@ -107,9 +84,11 @@
     --alto-pie-fijo: 0px;
   }
 
-  /* Un pie fijo (ficha, bolsa) marcado con data-pie-fijo sube los avisos por encima de él. */
-  html:has([data-pie-fijo]) {
-    --alto-pie-fijo: 5.5rem;
+  /* Respaldo hasta que Avisos mida el pie fijo (ficha, bolsa): solo en el celular, donde el pie es fijo. */
+  @media (width < 64rem) {
+    html:has([data-pie-fijo]) {
+      --alto-pie-fijo: 5.5rem;
+    }
   }
 
   html[data-bloqueo-scroll] {

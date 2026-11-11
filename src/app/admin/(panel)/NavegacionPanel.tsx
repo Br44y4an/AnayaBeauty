@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Hoja } from "@/components/ui/Hoja";
-import { IconoBolsa, IconoChevron, IconoEtiqueta, type PropsIcono } from "@/components/ui/Iconos";
+import { IconoBolsa, IconoChevron, IconoPaleta, IconoPuntos, IconoRecibo, type PropsIcono } from "@/components/ui/Iconos";
 import { cerrarSesion } from "../login/actions";
 import { useEnVivo } from "./PedidosEnVivo";
 
@@ -13,7 +13,7 @@ type Destino = { href: string; texto: string; icono?: ComponentType<PropsIcono> 
 
 const PRINCIPALES: Destino[] = [
   { href: "/admin", texto: "Pedidos", icono: IconoBolsa },
-  { href: "/admin/productos", texto: "Productos", icono: IconoEtiqueta },
+  { href: "/admin/productos", texto: "Productos", icono: IconoPaleta },
   { href: "/admin/recibos", texto: "Recibos", icono: IconoRecibo },
 ];
 
@@ -199,43 +199,5 @@ function LogoPanel() {
       <Image src="/marca/anaya-beauty.png" alt="Anaya Beauty" width={349} height={160} unoptimized className="h-9 w-auto" />
       <span className="text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-tinta-suave">Panel</span>
     </span>
-  );
-}
-
-function SvgPanel({ tamano = 24, children, ...props }: PropsIcono & { children: ReactNode }) {
-  return (
-    <svg
-      width={tamano}
-      height={tamano}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      {...props}
-    >
-      {children}
-    </svg>
-  );
-}
-
-function IconoRecibo(props: PropsIcono) {
-  return (
-    <SvgPanel {...props}>
-      <path d="M7 3.75h7.25L18.5 8v11.25a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.75a1 1 0 0 1 1-1Z" />
-      <path d="M14 3.75V8.25h4.5M9.5 12.5h5M9.5 16h3.5" />
-    </SvgPanel>
-  );
-}
-
-function IconoPuntos(props: PropsIcono) {
-  return (
-    <SvgPanel {...props}>
-      <circle cx="5.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="18.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
-    </SvgPanel>
   );
 }

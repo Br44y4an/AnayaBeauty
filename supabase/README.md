@@ -62,9 +62,10 @@ agrega a nadie.
 
 Para dar acceso a una cuenta nueva:
 
-1. Créala en Authentication → Users → Add user con "Auto Confirm User" (o con
-   `scripts/crear-admin.mjs`).
-2. Agrégala en el editor SQL:
+1. Con `scripts/crear-admin.mjs` (recomendado): crea la cuenta y ya la registra
+   en `administradores`; no hace falta nada más.
+2. Si la creas desde Authentication → Users → Add user (con "Auto Confirm
+   User"), esa cuenta no queda registrada: agrégala en el editor SQL:
 
    ```sql
    insert into administradores (user_id)

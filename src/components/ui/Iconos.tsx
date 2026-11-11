@@ -149,6 +149,25 @@ export function IconoInfo(props: PropsIcono) {
   );
 }
 
+export function IconoRecibo(props: PropsIcono) {
+  return (
+    <Icono {...props}>
+      <path d="M7 3.75h7.25L18.5 8v11.25a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.75a1 1 0 0 1 1-1Z" />
+      <path d="M14 3.75V8.25h4.5M9.5 12.5h5M9.5 16h3.5" />
+    </Icono>
+  );
+}
+
+export function IconoPuntos(props: PropsIcono) {
+  return (
+    <Icono {...props}>
+      <circle cx="5.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="18.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+    </Icono>
+  );
+}
+
 /** Glifo de la marca WhatsApp: el único icono relleno del set. */
 export function IconoWhatsApp(props: PropsIcono) {
   return (
@@ -161,20 +180,6 @@ export function IconoWhatsApp(props: PropsIcono) {
   );
 }
 
-// Alias temporales de la v4: los usan pantallas que se reescriben en esta versión; la integración los borra.
-export const IconoFlechaIzquierda = (props: PropsIcono) => <IconoChevron direccion="izquierda" {...props} />;
-export const IconoFlechaAbajo = (props: PropsIcono) => <IconoChevron direccion="abajo" {...props} />;
-export const IconoBasura = IconoEliminar;
-export const IconoLupa = IconoBuscar;
-
-export function IconoCorazon(props: PropsIcono) {
-  return (
-    <Icono {...props}>
-      <path d="M12 20s-7-4.4-8.6-8.3A4.8 4.8 0 0 1 12 7.1a4.8 4.8 0 0 1 8.6 4.6C19 15.6 12 20 12 20Z" />
-    </Icono>
-  );
-}
-
 export function IconoPaleta(props: PropsIcono) {
   return (
     <Icono {...props}>
@@ -182,23 +187,6 @@ export function IconoPaleta(props: PropsIcono) {
       <circle cx="7.75" cy="11.5" r="1" fill="currentColor" stroke="none" />
       <circle cx="10.5" cy="7.75" r="1" fill="currentColor" stroke="none" />
       <circle cx="15.25" cy="8.5" r="1" fill="currentColor" stroke="none" />
-    </Icono>
-  );
-}
-
-export function IconoEtiqueta(props: PropsIcono) {
-  return (
-    <Icono {...props}>
-      <path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5-8.5-8.5Z" />
-      <circle cx="8" cy="8" r="1.25" />
-    </Icono>
-  );
-}
-
-export function IconoLapiz(props: PropsIcono) {
-  return (
-    <Icono {...props}>
-      <path d="M4 20h4L19.3 8.7a2.1 2.1 0 0 0-3-3L5 17v3Z" />
     </Icono>
   );
 }

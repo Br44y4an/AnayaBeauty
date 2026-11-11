@@ -41,7 +41,7 @@ export function TarjetaPago({ pedido, pago, envioInfo, whatsappNegocio }: Props)
             {pago.metodo ? `Transfiere ${total} por ${pago.metodo}` : `Transfiere ${total} a esta cuenta`}
           </p>
           <dl className="mt-4 divide-y divide-linea rounded-md bg-superficie">
-            <Dato etiqueta={pago.metodo ?? "Cuenta"} valor={pago.numero} copiar={pago.numero} />
+            <Dato etiqueta={pago.metodo ?? "Cuenta"} valor={pago.numero} copiar={pago.numero} texto="Copiar número" />
             <Dato etiqueta="Valor" valor={total} copiar={String(pedido.total)} texto="Copiar valor" />
           </dl>
           {pago.titular && <p className="mt-3 text-[15px] leading-5 text-tinta">Titular: {pago.titular}</p>}
@@ -50,7 +50,10 @@ export function TarjetaPago({ pedido, pago, envioInfo, whatsappNegocio }: Props)
         <p className="mt-1 text-base leading-6 text-tinta">Te enviamos los datos de pago por WhatsApp</p>
       )}
 
-      <p className="mt-3 text-[13px] leading-[18px] text-tinta-suave">Envío: {envioInfo}</p>
+      <dl className="mt-3 text-[13px] leading-[18px] text-tinta-suave">
+        <dt className="font-semibold">Envío</dt>
+        <dd>{envioInfo}</dd>
+      </dl>
 
       <a
         href={enlaceWhatsApp(mensaje, whatsappNegocio)}
@@ -65,7 +68,7 @@ export function TarjetaPago({ pedido, pago, envioInfo, whatsappNegocio }: Props)
   );
 }
 
-function Dato(p: { etiqueta: string; valor: string; copiar: string; texto?: string }) {
+function Dato(p: { etiqueta: string; valor: string; copiar: string; texto: string }) {
   return (
     <div className="px-3.5 py-3">
       <dt className="text-[13px] leading-[18px] text-tinta-suave">{p.etiqueta}</dt>

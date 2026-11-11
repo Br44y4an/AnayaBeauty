@@ -119,6 +119,6 @@ describe("plantillaCorreoPedido — sistema visual v5", () => {
 
   it("el botón del panel apunta al sitio desde el que se hizo el pedido", () => {
     const html = plantillaCorreoPedido({ ...datos, sitio: "https://tienda.test" });
-    expect(html).toContain('href="https://tienda.test/admin"');
+    expect(html).toContain('href="https://tienda.test/admin?q=AB-0043"');
   });
 });

@@ -10,6 +10,7 @@ import {
   type FilaVariante,
 } from "@/lib/data/catalogo";
 import { obtenerConfiguracionDePrecios } from "@/lib/data/configuracion";
+import { falla } from "@/lib/data/errores";
 import type { DatosBolsa, ProductoBolsa } from "@/lib/types";
 
 type FilaCarrito = {
@@ -28,11 +29,6 @@ type FilaExtra = {
   etiqueta_variante: string | null;
   product_shades: FilaVariante[] | null;
 };
-
-function falla(mensaje: string, error: { message: string }): never {
-  console.error(`[bolsa] ${mensaje}:`, error);
-  throw new Error(`${mensaje}.`);
-}
 
 /**
  * Datos frescos para la bolsa, sin caché: stock y precio salen de
@@ -55,8 +51,8 @@ export async function obtenerDatosBolsa(ids: string[]): Promise<DatosBolsa> {
       .overrideTypes<FilaExtra[], { merge: false }>(),
   ]);
 
-  if (carrito.error) falla("No se pudo cargar tu bolsa", carrito.error);
-  if (extras.error) falla("No se pudieron cargar las variantes de tu bolsa", extras.error);
+  if (carrito.error) falla("bolsa", "No se pudo cargar tu bolsa", carrito.error);
+  if (extras.error) falla("bolsa", "No se pudieron cargar las variantes de tu bolsa", extras.error);
 
   // La RPC sin tipos generados devuelve `any`: aquí se fija la forma esperada.
   const filas: FilaCarrito[] = carrito.data ?? [];

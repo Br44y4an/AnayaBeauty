@@ -35,11 +35,7 @@ function urlPedidos(estado: EstadoPedido | undefined, q: string): string {
   return consulta ? `/admin?${consulta}` : "/admin";
 }
 
-/** Con pedidos por atender, la pestaña del navegador lo dice: «(3) Pedidos». */
-export async function generateMetadata(): Promise<Metadata> {
-  const nuevos = await contarPedidosNuevos().catch(() => 0);
-  return { title: nuevos > 0 ? `(${nuevos}) Pedidos` : "Pedidos" };
-}
+export const metadata: Metadata = { title: "Pedidos" };
 
 export default async function PaginaPedidos({ searchParams }: { searchParams: Promise<Parametros> }) {
   const parametros = await searchParams;
@@ -87,7 +83,7 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
         </Boton>
       </Form>
 
-      <nav aria-label="Filtrar por estado" className="-mx-4 overflow-x-auto px-4">
+      <nav aria-label="Filtrar por estado" className="-mx-4 -my-1 overflow-x-auto px-4 py-1">
         <ul className="flex gap-2">
           {FILTROS.map((f) => {
             const activo = f.estado === estado;
@@ -134,9 +130,9 @@ export default async function PaginaPedidos({ searchParams }: { searchParams: Pr
 
 function Cifra({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
-    <div className="min-w-0 px-3 py-3 sm:px-4">
+    <div className="min-w-0 px-2 py-3 sm:px-4">
       <dt className="text-[13px] leading-[18px] text-tinta-suave">{etiqueta}</dt>
-      <dd className="mt-0.5 truncate text-[17px] font-bold leading-[22px] tabular-nums text-tinta">{valor}</dd>
+      <dd className="mt-0.5 break-words text-[15px] font-bold leading-[22px] tabular-nums text-tinta sm:text-[17px]">{valor}</dd>
     </div>
   );
 }

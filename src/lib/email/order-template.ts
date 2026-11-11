@@ -104,7 +104,7 @@ export function plantillaCorreoPedido(datos: DatosCorreo): string {
       </table>
 
       <p style="margin-top:28px;text-align:center;">
-        <a href="${escapar(sitio)}/admin"
+        <a href="${escapar(sitio)}/admin?q=${encodeURIComponent(datos.numeroPedido)}"
            style="display:inline-block;background:${PALETA.acento};color:${PALETA.fondo};text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;">
           Ver en el panel
         </a>

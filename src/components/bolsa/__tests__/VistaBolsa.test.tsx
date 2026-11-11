@@ -178,7 +178,9 @@ describe("VistaBolsa", () => {
     await lista();
 
     expect(screen.getAllByText("Total productos").length).toBeGreaterThan(0);
-    expect(screen.getByText(`Envío: ${ENVIO}`)).toBeInTheDocument();
+    const envio = screen.getByText("Envío", { selector: "dt" });
+    expect(envio.nextElementSibling).toHaveTextContent(ENVIO);
+    expect(screen.queryByText(/Envío: /)).not.toBeInTheDocument();
     expect(screen.getByText("Te faltan $11.500 para el 5 % de descuento")).toBeInTheDocument();
   });
 

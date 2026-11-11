@@ -107,6 +107,38 @@ describe("AgregarRapido", () => {
     expect(screen.getByRole("group", { name: "Cantidad de Cepillo desenredante" })).toHaveTextContent("1");
   });
 
+  it("al pasar de «Agregar» al stepper el foco va al «+», no se pierde", () => {
+    render(<AgregarRapido producto={producto()} />);
+    const agregar = screen.getByRole("button", { name: "Agregar" });
+    agregar.focus();
+
+    fireEvent.click(agregar);
+
+    expect(screen.getByRole("button", { name: "Agregar uno de Cepillo desenredante" })).toHaveFocus();
+  });
+
+  it("si con esa unidad se acaba el stock, el foco va al «−» (el «+» queda inactivo)", () => {
+    render(<AgregarRapido producto={producto({ stock: 1 })} />);
+    const agregar = screen.getByRole("button", { name: "Agregar" });
+    agregar.focus();
+
+    fireEvent.click(agregar);
+
+    expect(screen.getByRole("button", { name: "Agregar uno de Cepillo desenredante" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Quitar uno de Cepillo desenredante" })).toHaveFocus();
+  });
+
+  it("al bajar a 0 el foco vuelve a «Agregar»", () => {
+    useCarrito.getState().agregar("p1", 1);
+    render(<AgregarRapido producto={producto()} />);
+    const quitar = screen.getByRole("button", { name: "Quitar uno de Cepillo desenredante" });
+    quitar.focus();
+
+    fireEvent.click(quitar);
+
+    expect(screen.getByRole("button", { name: "Agregar" })).toHaveFocus();
+  });
+
   it("el máximo respeta el stock", () => {
     render(<AgregarRapido producto={producto({ stock: 2 })} />);
     fireEvent.click(screen.getByRole("button", { name: "Agregar" }));

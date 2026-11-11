@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 // `server-only` revienta fuera de un Server Component; en pruebas se neutraliza.
 vi.mock("server-only", () => ({}));
 
-import { mapearConfiguracion } from "@/lib/data/configuracion";
+import { ENVIO_POR_DEFECTO, mapearConfiguracion } from "@/lib/data/configuracion";
 
 const fila = (clave: string, valor: string | null) => ({ clave, valor });
 
@@ -16,6 +16,7 @@ describe("mapearConfiguracion", () => {
       envioInfo: "El envío se coordina por WhatsApp después de confirmar tu pedido.",
       pago: { metodo: null, numero: null, titular: null },
     });
+    expect(ENVIO_POR_DEFECTO).toBe("El envío se coordina por WhatsApp después de confirmar tu pedido.");
   });
 
   it("traduce los ajustes guardados", () => {

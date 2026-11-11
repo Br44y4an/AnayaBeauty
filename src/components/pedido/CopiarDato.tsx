@@ -6,7 +6,7 @@ import { vibrar } from "@/lib/dispositivo";
 
 // Copiar a mano 10 dígitos de una pantalla al banco es donde se equivoca la gente. Sin portapapeles (sin
 // HTTPS o navegador viejo) no pasa nada: el dato sigue visible y seleccionable.
-export function CopiarDato({ valor, texto = "Copiar" }: { valor: string; texto?: string }) {
+export function CopiarDato({ valor, texto }: { valor: string; texto: string }) {
   const [copiado, setCopiado] = useState(false);
   const reloj = useRef<ReturnType<typeof setTimeout>>(undefined);
 

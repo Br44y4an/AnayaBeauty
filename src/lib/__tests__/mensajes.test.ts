@@ -19,6 +19,14 @@ describe("mensajeAmable", () => {
     expect(r.campo).toBe("bolsa");
   });
 
+  it("con 0 unidades dice que se agotó, no «solo quedan 0»", () => {
+    const r = mensajeAmable("SIN_STOCK|Cosmetiquera|0");
+
+    expect(r.mensaje).toBe("Cosmetiquera se agotó. Quítalo de tu bolsa y confirma de nuevo.");
+    expect(r.mensaje).not.toMatch(/quedan 0/);
+    expect(r.campo).toBe("bolsa");
+  });
+
   it("da un texto propio a cada código nuevo", () => {
     const codigos = ["DEMASIADOS_PEDIDOS", "TONO_NO_DISPONIBLE", "PEDIDO_MUY_GRANDE"];
     const textos = codigos.map((c) => mensajeAmable(c).mensaje);

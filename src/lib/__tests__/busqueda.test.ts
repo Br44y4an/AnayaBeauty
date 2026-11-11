@@ -3,6 +3,7 @@ import {
   compactarReferencia,
   filtroBusqueda,
   gruposDeBusqueda,
+  nivelDeCoincidencia,
   normalizarTexto,
 } from "@/lib/data/busqueda";
 
@@ -150,5 +151,38 @@ describe("gruposDeBusqueda", () => {
 
   it("no recorta las referencias que terminan en s", () => {
     expect(gruposDeBusqueda("RB801S")).toEqual(["rb801s"]);
+  });
+});
+
+describe("nivelDeCoincidencia", () => {
+  const nivel = (q: string, p: Parameters<typeof nivelDeCoincidencia>[0]) =>
+    nivelDeCoincidencia(p, gruposDeBusqueda(q), q);
+  const cepillo = { nombre: "Cepillo térmico", referencia: "CP26E", categoria: "Cepillos", departamento: null };
+
+  it("0: la referencia compacta es exactamente lo buscado", () => {
+    expect(nivel("usk621", { nombre: "Lip gloss gummy", referencia: "USK-621" })).toBe(0);
+    expect(nivel("USK 621", { nombre: "Lip gloss gummy", referencia: "USK-621" })).toBe(0);
+  });
+
+  it("1: todos los grupos están en el nombre o la referencia (también con sinónimos)", () => {
+    expect(nivel("usk621", { nombre: "Otro", referencia: "USK-6210" })).toBe(1);
+    expect(nivel("gloss", { nombre: "Lip gloss Oil Glazed", referencia: "GLS735" })).toBe(1);
+    expect(nivel("brillo", { nombre: "Lip gloss Oil Glazed", referencia: "GLS735" })).toBe(1);
+    expect(nivel("labial rojo", { nombre: "Labial mate rojo", referencia: "LB-1" })).toBe(1);
+  });
+
+  it("2: hace falta la categoría o el departamento para cubrir todos los grupos", () => {
+    expect(nivel("gloss", { nombre: "Brillo labial", referencia: "X1", categoria: "Lip gloss" })).toBe(1);
+    expect(nivel("labios roja", { nombre: "Tinta roja", referencia: "T1", categoria: "Tintas", departamento: "Labios" })).toBe(2);
+    expect(nivel("gloss", { nombre: "Tono rosa", referencia: "T2", categoria: "Lip gloss" })).toBe(2);
+    expect(nivel("rubor polvo", { nombre: "Rubor compacto", referencia: "R1", categoria: "Polvos y bases", departamento: "Rostro" })).toBe(2);
+  });
+
+  it("3: solo coincide por lo que no se ve (descripción o variantes)", () => {
+    expect(nivel("gloss", cepillo)).toBe(3);
+  });
+
+  it("sin tildes ni mayúsculas, igual que la base", () => {
+    expect(nivel("PESTAÑAS", { nombre: "Pestañas postizas", referencia: "P-1" })).toBe(1);
   });
 });

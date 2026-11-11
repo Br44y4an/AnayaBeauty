@@ -89,13 +89,4 @@ describe("Hoja", () => {
     );
     expect(screen.getByRole("dialog", { name: "Brillo labial" })).toBeInTheDocument();
   });
-
-  it("sigue aceptando el uso viejo (sin abierta, con descripción)", () => {
-    render(
-      <Hoja titulo="Labial" descripcion="Ref. GLS735" alCerrar={() => {}}>
-        contenido
-      </Hoja>
-    );
-    expect(screen.getByRole("dialog", { name: "Labial" })).toHaveTextContent("Ref. GLS735");
-  });
 });

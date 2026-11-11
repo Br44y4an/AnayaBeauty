@@ -22,8 +22,11 @@ export function ResumenBolsa({ totales, envioInfo }: { totales: Totales; envioIn
           <dt className="font-semibold text-tinta">Total productos</dt>
           <dd className="text-2xl font-bold leading-[30px] tabular-nums text-tinta">{pesos(totales.total)}</dd>
         </div>
+        <div className="text-[13px] leading-[18px] text-tinta-suave">
+          <dt className="font-semibold">Envío</dt>
+          <dd>{envioInfo}</dd>
+        </div>
       </dl>
-      <p className="mt-2 text-[13px] leading-[18px] text-tinta-suave">Envío: {envioInfo}</p>
     </section>
   );
 }

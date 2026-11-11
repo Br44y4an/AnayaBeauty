@@ -6,10 +6,15 @@ import { Avisos } from "@/components/ui/Avisos";
 import { NavegacionPanel } from "./NavegacionPanel";
 import { PedidosEnVivo } from "./PedidosEnVivo";
 
-export const metadata: Metadata = {
-  title: { default: "Panel · Anaya Beauty", template: "%s · Panel Anaya Beauty" },
-  robots: { index: false, follow: false },
-};
+/** Con pedidos por atender, la pestaña lo dice en toda sección: «(3) Pedidos · Panel Anaya Beauty». */
+export async function generateMetadata(): Promise<Metadata> {
+  const nuevos = await contarPedidosNuevos().catch(() => 0);
+  const prefijo = nuevos > 0 ? `(${nuevos}) ` : "";
+  return {
+    title: { default: `${prefijo}Panel · Anaya Beauty`, template: `${prefijo}%s · Panel Anaya Beauty` },
+    robots: { index: false, follow: false },
+  };
+}
 
 export default async function LayoutPanel({ children }: { children: ReactNode }) {
   await exigirAdmin();
