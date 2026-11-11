@@ -1,14 +1,17 @@
 /**
- * Cargue masivo desde Catalogo_Engol.xlsx: extrae las imágenes incrustadas
+ * Cargue inicial desde Catalogo_Engol.xlsx: extrae las imágenes incrustadas
  * en cada fila, crea la categoría de sección (nombre de hoja) con sus
- * subcategorías (columna "Categoria") como hijas, y crea/actualiza cada
- * producto en modo borrador (activo=false, stock=0, sin precios) para que
- * se complete manualmente desde el panel de admin.
+ * subcategorías (columna "Categoria") como hijas, y agrega cada producto
+ * NUEVO en modo borrador (activo=false, stock=0, sin precios) para que se
+ * complete manualmente desde el panel de admin.
+ *
+ * Solo agrega referencias que no existen: las que ya están en la base no se
+ * tocan (ni foto, ni nombre, ni stock, ni visibilidad). Para cambiar productos
+ * existentes usa el panel o su importador CSV, no este script.
  *
  * Requiere el binario `unzip` en el PATH (un .xlsx es un .zip).
  *
  * Uso: node --env-file=.env.local scripts/cargar-catalogo-engol.mjs
- * Es seguro volver a ejecutarlo: actualiza en vez de duplicar.
  */
 import { createClient } from "@supabase/supabase-js";
 import { execFileSync } from "node:child_process";
@@ -110,7 +113,7 @@ function parseAnclasDeImagen(xml) {
 // 1) Extraer el .xlsx (es un .zip) a una carpeta temporal
 // ---------------------------------------------------------------------
 if (!existsSync(RUTA_XLSX)) {
-  console.error(`✗ No se encontró ${RUTA_XLSX}`);
+  console.error(`No se encontró ${RUTA_XLSX}`);
   process.exit(1);
 }
 
@@ -163,7 +166,7 @@ for (const hoja of hojas) {
     const imagenRel = imagenPorFila.get(numeroFila);
 
     if (!referencia || !descripcion || !categoria || !imagenRel) {
-      console.log(`⚠ Hoja "${hoja.nombre}" fila ${numeroFila}: incompleta, se omite.`);
+      console.log(`Aviso: hoja "${hoja.nombre}" fila ${numeroFila}: incompleta, se omite.`);
       continue;
     }
 
@@ -178,7 +181,7 @@ for (const hoja of hojas) {
   }
 }
 
-console.log(`✓ ${productosPorHoja.length} productos leídos del Excel\n`);
+console.log(`${productosPorHoja.length} productos leídos del Excel\n`);
 
 // ---------------------------------------------------------------------
 // 3) Referencias únicas: si el Excel repite una referencia, se sufija
@@ -206,20 +209,39 @@ if (!buckets.some((b) => b.name === BUCKET)) {
     fileSizeLimit: "5MB",
   });
   if (error) throw new Error(`No se pudo crear el bucket: ${error.message}`);
-  console.log(`✓ Bucket "${BUCKET}" creado (público)\n`);
+  console.log(`Bucket "${BUCKET}" creado (público)\n`);
 } else {
-  console.log(`✓ Bucket "${BUCKET}" ya existía\n`);
+  console.log(`Bucket "${BUCKET}" ya existía\n`);
 }
 
 // ---------------------------------------------------------------------
-// 5) Categorías: sección = categoría padre, columna Categoria = hija
+// 5) Categorías de los productos nuevos: sección = madre, columna Categoria = hija.
+//    Solo se crea lo que falta y queda oculto: en el panel se le asigna
+//    departamento y se activa (si no, aparecería como un departamento vacío).
 // ---------------------------------------------------------------------
-const { data: categoriasExistentes } = await db
+// PostgREST devuelve como mucho 1000 filas por consulta: se leen por páginas.
+async function referenciasExistentes() {
+  const referencias = new Set();
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await db.from("products").select("referencia").order("id").range(desde, desde + 999);
+    if (error) throw new Error(`No se pudieron leer las referencias existentes: ${error.message}`);
+    for (const p of data) referencias.add(p.referencia);
+    if (data.length < 1000) return referencias;
+  }
+}
+
+const referenciasPrevias = await referenciasExistentes();
+const productosNuevos = productosPorHoja.filter((p) => !referenciasPrevias.has(p.referencia));
+
+const { data: categoriasExistentes, error: errorCategorias } = await db
   .from("categories")
   .select("id, slug, categoria_padre_id, orden");
+if (errorCategorias) throw new Error(`No se pudieron leer las categorías: ${errorCategorias.message}`);
 
 const idPorSlug = new Map(categoriasExistentes.map((c) => [c.slug, c.id]));
-let siguienteOrdenPadre = Math.max(0, ...categoriasExistentes.filter((c) => !c.categoria_padre_id).map((c) => c.orden)) + 1;
+const raices = categoriasExistentes.filter((c) => !c.categoria_padre_id);
+let siguienteOrdenPadre = Math.max(0, ...raices.map((c) => c.orden)) + 1;
+let categoriasNuevas = 0;
 
 async function obtenerOCrearCategoria(nombre, categoriaPadreId, orden) {
   const slug = generarSlug(nombre);
@@ -227,56 +249,54 @@ async function obtenerOCrearCategoria(nombre, categoriaPadreId, orden) {
 
   const { data, error } = await db
     .from("categories")
-    .insert({ nombre, slug, categoria_padre_id: categoriaPadreId, orden })
+    .insert({ nombre, slug, categoria_padre_id: categoriaPadreId, orden, activo: false })
     .select("id")
     .single();
   if (error) throw new Error(`No se pudo crear la categoría "${nombre}": ${error.message}`);
 
   idPorSlug.set(slug, data.id);
+  categoriasNuevas++;
   return data.id;
 }
 
 const idCategoriaHija = new Map(); // "seccion::categoria" -> id
-let categoriasNuevas = 0;
 
 for (const seccion of hojas.map((h) => h.nombre)) {
-  const yaExistiaPadre = idPorSlug.has(generarSlug(seccion));
-  const idPadre = await obtenerOCrearCategoria(seccion, null, siguienteOrdenPadre);
-  if (!yaExistiaPadre) {
-    siguienteOrdenPadre++;
-    categoriasNuevas++;
-  }
-
   const hijasDeEstaSeccion = [
-    ...new Set(productosPorHoja.filter((p) => p.seccion === seccion).map((p) => p.categoria)),
+    ...new Set(productosNuevos.filter((p) => p.seccion === seccion).map((p) => p.categoria)),
   ];
 
   let ordenHija = 0;
   for (const nombreHija of hijasDeEstaSeccion) {
-    const slugHija = generarSlug(nombreHija);
-    const yaExistiaHija = idPorSlug.has(slugHija);
-    const idHija = await obtenerOCrearCategoria(nombreHija, idPadre, ordenHija);
-    if (!yaExistiaHija) categoriasNuevas++;
+    let idHija = idPorSlug.get(generarSlug(nombreHija));
+    if (!idHija) {
+      const padreNuevo = !idPorSlug.has(generarSlug(seccion));
+      const idPadre = await obtenerOCrearCategoria(seccion, null, siguienteOrdenPadre);
+      if (padreNuevo) siguienteOrdenPadre++;
+      idHija = await obtenerOCrearCategoria(nombreHija, idPadre, ordenHija);
+    }
     idCategoriaHija.set(`${seccion}::${nombreHija}`, idHija);
     ordenHija++;
   }
 }
 
-console.log(`✓ Categorías listas (${categoriasNuevas} nuevas)\n`);
+console.log(`Categorías listas (${categoriasNuevas} nuevas, ocultas)\n`);
 
 // ---------------------------------------------------------------------
-// 6) Subir imágenes y crear/actualizar productos, en modo borrador
+// 6) Subir imágenes y agregar los productos nuevos, en modo borrador
 // ---------------------------------------------------------------------
-const { data: existentes } = await db.from("products").select("referencia");
-const referenciasPrevias = new Set((existentes ?? []).map((p) => p.referencia));
-
 let creados = 0;
-let actualizados = 0;
+let omitidos = 0;
 const errores = [];
 
 for (let i = 0; i < productosPorHoja.length; i++) {
   const p = productosPorHoja[i];
   const categoryId = idCategoriaHija.get(`${p.seccion}::${p.categoria}`);
+
+  if (referenciasPrevias.has(p.referencia)) {
+    omitidos++;
+    continue;
+  }
 
   try {
     const bytes = readFileSync(p.rutaImagen);
@@ -285,11 +305,12 @@ for (let i = 0; i < productosPorHoja.length; i++) {
 
     const { error: errorSubida } = await db.storage
       .from(BUCKET)
-      .upload(rutaStorage, bytes, { contentType, upsert: true });
+      .upload(rutaStorage, bytes, { contentType, upsert: false });
     if (errorSubida) throw new Error(`imagen: ${errorSubida.message}`);
 
     const { data: urlPublica } = db.storage.from(BUCKET).getPublicUrl(rutaStorage);
 
+    // ignoreDuplicates: si la referencia apareció mientras corría el script, se deja como está.
     const { error: errorProducto } = await db.from("products").upsert(
       {
         referencia: p.referencia,
@@ -301,12 +322,11 @@ for (let i = 0; i < productosPorHoja.length; i++) {
         activo: false,
         orden: i,
       },
-      { onConflict: "referencia" }
+      { onConflict: "referencia", ignoreDuplicates: true }
     );
     if (errorProducto) throw new Error(`producto: ${errorProducto.message}`);
 
-    if (referenciasPrevias.has(p.referencia)) actualizados++;
-    else creados++;
+    creados++;
   } catch (e) {
     errores.push(`${p.referencia} (${p.nombre}): ${e.message}`);
   }
@@ -322,24 +342,30 @@ rmSync(carpeta, { recursive: true, force: true });
 // 7) Resumen
 // ---------------------------------------------------------------------
 console.log("\n──────────────────────────────────────────");
-console.log(`✅ Cargue terminado`);
-console.log(`   Creados:      ${creados}`);
-console.log(`   Actualizados: ${actualizados}`);
-console.log(`   Con error:    ${errores.length}`);
-console.log(`   Categorías nuevas: ${categoriasNuevas}`);
+console.log(`Cargue terminado`);
+console.log(`   Nuevos:                 ${creados}`);
+console.log(`   Ya existían (intactos): ${omitidos}`);
+console.log(`   Con error:              ${errores.length}`);
+console.log(`   Categorías nuevas:      ${categoriasNuevas}`);
 
 if (referenciasRenombradas.length) {
-  console.log(`\n⚠ Referencias repetidas en el Excel (se les agregó sufijo para no perder ninguna):`);
+  console.log(`\nAviso: referencias repetidas en el Excel (se les agregó sufijo para no perder ninguna):`);
   for (const r of referenciasRenombradas) console.log(`   ${r}`);
 }
 
 if (errores.length) {
-  console.log(`\n✗ Errores:`);
+  console.log(`\nErrores:`);
   for (const e of errores) console.log(`   ${e}`);
+  console.log("Si dice que la imagen ya existe, la foto quedó de un cargue anterior:");
+  console.log("crea ese producto desde el panel.");
 }
 
-console.log(`\nTodos los productos quedaron en BORRADOR (inactivos, stock 0, sin precio).`);
+console.log(`\nLos productos nuevos quedaron en BORRADOR (inactivos, stock 0, sin precio).`);
 console.log(`Actívalos desde el panel de admin después de ponerles precio y stock.`);
+if (categoriasNuevas) {
+  console.log(`Las ${categoriasNuevas} categorías nuevas quedaron ocultas:`);
+  console.log("en /admin/categorias asígnales departamento y actívalas.");
+}
 
 // ---------------------------------------------------------------------
 // 8) Aviso informativo: referencias donde el Excel detectó el logo de
@@ -359,7 +385,7 @@ if (hojaLogo) {
 
   if (refsConLogo.length) {
     console.log(
-      `\nℹ En ${refsConLogo.length} referencias el Excel detectó (de forma automática, no exhaustiva) ` +
+      `\nNota: en ${refsConLogo.length} referencias el Excel detectó (de forma automática, no exhaustiva) ` +
         `el logo de Engol impreso en la foto del producto o su empaque. Puede que quieras revisar esas fotos:`
     );
     console.log(`   ${refsConLogo.join(", ")}`);
