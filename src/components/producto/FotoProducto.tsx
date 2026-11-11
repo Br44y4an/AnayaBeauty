@@ -3,24 +3,24 @@
 import Image from "next/image";
 import { useState } from "react";
 import { VisorImagen } from "@/components/ui/VisorImagen";
-import { IconoCorazon, IconoLupa } from "@/components/ui/Iconos";
+import { IconoMas } from "@/components/ui/Iconos";
 
-/**
- * Foto principal del detalle, ampliable.
- *
- * En maquillaje la foto decide la compra: hay que poder acercarse a ver
- * el color de verdad. En la tarjeta del catálogo esto ya existía; en el
- * detalle, que es donde la clienta está decidiendo, la imagen no se
- * podía abrir.
- */
-export function FotoProducto({ src, alt }: { src: string | null; alt: string }) {
-  const [abierto, setAbierto] = useState(false);
+type Props = {
+  src: string | null;
+  alt: string;
+  /** Solo en la página completa, donde la foto es lo más grande de la primera pantalla. */
+  prioridad?: boolean;
+};
+
+// La foto es la leyenda de los tonos: va completa (object-contain) y a todo el ancho, nunca recortada
+// en cuadrado. La caja es 4:3 porque así son casi todas las fotos (~500×380); un toque la amplía.
+export function FotoProducto({ src, alt, prioridad = false }: Props) {
+  const [ampliada, setAmpliada] = useState(false);
 
   if (!src) {
     return (
-      <div className="flex aspect-square items-center justify-center rounded-tarjeta
-                      bg-petalo text-lila-suave shadow-petalo">
-        <IconoCorazon className="h-20 w-20" />
+      <div className="flex aspect-[4/3] w-full items-center justify-center bg-superficie text-[15px] text-tinta-suave md:rounded-md">
+        Sin foto
       </div>
     );
   }
@@ -29,30 +29,28 @@ export function FotoProducto({ src, alt }: { src: string | null; alt: string }) 
     <>
       <button
         type="button"
-        onClick={() => setAbierto(true)}
-        aria-label={`Ver la foto de ${alt} en grande`}
-        className="group relative aspect-square w-full cursor-pointer overflow-hidden
-                   rounded-tarjeta bg-petalo shadow-petalo"
+        onClick={() => setAmpliada(true)}
+        aria-label={`Ampliar foto de ${alt}`}
+        className="group relative block aspect-[4/3] w-full cursor-zoom-in overflow-hidden bg-superficie md:rounded-md"
       >
         <Image
           src={src}
           alt={alt}
           fill
-          sizes="(max-width: 768px) 100vw, 600px"
-          className="object-cover"
-          preload
+          sizes="(min-width: 1024px) 640px, (min-width: 768px) 50vw, 100vw"
+          {...(prioridad ? { preload: true } : { loading: "eager" as const, fetchPriority: "high" as const })}
+          className="object-contain p-[3%] mix-blend-multiply"
         />
         <span
           aria-hidden="true"
-          className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center
-                     rounded-full bg-petalo/90 text-carbon shadow-petalo
-                     transition group-hover:bg-petalo"
+          className="absolute bottom-3 right-3 flex h-8 items-center gap-1 rounded-full bg-fondo pl-2 pr-3 text-[13px]
+                     font-semibold text-tinta ring-1 ring-linea"
         >
-          <IconoLupa className="h-5 w-5" />
+          <IconoMas tamano={16} />
+          Ampliar
         </span>
       </button>
-
-      {abierto && <VisorImagen src={src} alt={alt} alCerrar={() => setAbierto(false)} />}
+      <VisorImagen src={src} alt={alt} abierto={ampliada} alCerrar={() => setAmpliada(false)} />
     </>
   );
 }

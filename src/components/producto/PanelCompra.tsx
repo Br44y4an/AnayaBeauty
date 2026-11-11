@@ -1,184 +1,196 @@
 "use client";
 
-import { useState } from "react";
-import { precioUnitarioPara, sugerenciaUpsell } from "@/lib/pricing";
+import Link from "next/link";
+import { useRef, useState, type ReactNode } from "react";
+import { Boton, BotonEnlace, estilosBoton } from "@/components/ui/Boton";
+import { IconoBolsa, IconoCheck, IconoWhatsApp } from "@/components/ui/Iconos";
+import { Insignia } from "@/components/ui/Insignia";
+import { Stepper } from "@/components/ui/Stepper";
+import { useModalProducto } from "@/components/producto/ModalProducto";
+import { PreciosPorCantidad } from "@/components/producto/PreciosPorCantidad";
+import { SelectorVariantes, type ManejadorSelector } from "@/components/producto/SelectorVariantes";
+import { CLAVE_UNICA, useCompraProducto, useLineasEnBolsa } from "@/hooks/useCompraProducto";
 import { pesos } from "@/lib/format";
-import { useCarrito, useLineasDeProducto, useUnidadesDeProducto } from "@/lib/cart";
-import { Boton } from "@/components/ui/Boton";
-import { IconoBolsa, IconoCheck, IconoBasura } from "@/components/ui/Iconos";
-import { SelectorCantidad } from "./SelectorCantidad";
-import { SelectorTonos } from "./SelectorTonos";
-import { TablaEscalones } from "./TablaEscalones";
-import type { Producto, Variante } from "@/lib/types";
+import { nombreVariante, unaVariante } from "@/lib/variantes";
+import { enlaceWhatsApp } from "@/lib/whatsapp";
+import type { Producto } from "@/lib/types";
 
-/**
- * Panel de compra de la pantalla de detalle.
- *
- * Aquí sí caben los tonos en línea: la pantalla es de un solo producto y
- * hay sitio de sobra. En la grilla del catálogo, en cambio, la paleta
- * vive en una hoja que solo se abre si la clienta la pide (ver
- * `HojaCompra`), porque ahí eran 591 paletas compitiendo por el espacio.
- */
-export function PanelCompra({ producto }: { producto: Producto }) {
-  const [cantidad, setCantidad] = useState(1);
-  const [tono, setTono] = useState<Variante | null>(null);
-  const [agregado, setAgregado] = useState(false);
+const POCAS_UNIDADES = 5;
+const BOTON_WHATSAPP = estilosBoton({ variante: "secundario", tamano: "grande", ancho: true });
 
-  const agregar = useCarrito((e) => e.agregar);
-  const establecer = useCarrito((e) => e.establecer);
+type Props = {
+  producto: Producto;
+  variante: "modal" | "pagina";
+  /** Número del negocio para «Preguntar por WhatsApp»; sin él se usa el de respaldo. */
+  whatsapp?: string | null;
+  /** Va entre la compra y el pie fijo (la descripción). */
+  children?: ReactNode;
+};
 
-  // Los tonos comparten el inventario del producto: lo que ya está en la
-  // bolsa reduce lo que todavía se puede agregar.
-  const yaEnBolsa = useUnidadesDeProducto(producto.id);
-  const lineasDeEsteProducto = useLineasDeProducto(producto.id);
-  const disponible = Math.max(0, producto.stock - yaEnBolsa);
+/** Precio, variantes o cantidad, lo que ya hay en la bolsa y el pie fijo con la acción principal. */
+export function PanelCompra({ producto, variante, whatsapp = null, children }: Props) {
+  const { seleccion, cambiar, resumen, agregar } = useCompraProducto(producto);
+  const lineas = useLineasEnBolsa(producto.id);
+  const modal = useModalProducto();
+  const selector = useRef<ManejadorSelector>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (producto.stock === 0) {
-    return (
-      <div className="rounded-tarjeta bg-petalo p-6 text-center shadow-petalo">
-        <p className="font-display text-xl text-carbon-suave">Agotado por ahora</p>
-        <p className="mt-1 text-carbon-suave">Vuelve pronto, reponemos seguido 💕</p>
+  const variantes = producto.variantes ?? [];
+  const etiqueta = producto.etiquetaVariante;
+  const agotado = resumen.bloqueo === "agotado" || (variantes.length > 0 && variantes.every((v) => v.agotado));
+  const sinPrecio = !agotado && resumen.bloqueo === "sin-precio";
+  const lleno = !agotado && !sinPrecio && resumen.maxNuevas === 0;
+  const referencia = `${producto.nombre} (Ref. ${producto.referencia})`;
+
+  function alCambiar(clave: string, cantidad: number) {
+    setError(null);
+    cambiar(clave, cantidad);
+  }
+
+  function alPulsar() {
+    if (resumen.bloqueo === "sin-seleccion") {
+      setError(`Elige al menos ${unaVariante(etiqueta)}`);
+      selector.current?.enfocar();
+    } else if (resumen.bloqueo === "supera-stock") {
+      setError(`Solo quedan ${resumen.maxNuevas} disponibles. Ajusta la cantidad.`);
+    } else if (agregar()) {
+      setError(null);
+      if (variante === "modal") modal?.cerrar();
+    }
+  }
+
+  let compra: ReactNode;
+  let accion: ReactNode;
+  if (agotado || sinPrecio) {
+    const [mensaje, etiquetaEnlace] = agotado
+      ? [`Hola, quiero saber cuándo vuelve ${referencia}.`, "Preguntar por WhatsApp"]
+      : [`Hola, quiero saber el precio de ${referencia}.`, "Preguntar el precio"];
+    compra = (
+      <div>
+        {sinPrecio ? (
+          <p className="text-xl font-semibold leading-[26px] text-tinta">Precio por confirmar</p>
+        ) : (
+          producto.escalones.length > 0 && <PrecioUnidad precio={producto.escalones[0].precioUnitario} />
+        )}
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-5 text-tinta-suave">
+          {agotado && <Insignia>Agotado</Insignia>}
+          {agotado
+            ? "Escríbenos por WhatsApp y te avisamos cuando vuelva."
+            : "Este producto aún no tiene precio. Pregúntanos por WhatsApp."}
+        </p>
       </div>
     );
-  }
-
-  if (producto.escalones.length === 0) {
-    return (
-      <p className="rounded-tarjeta bg-petalo p-6 text-center text-carbon-suave shadow-petalo">
-        Este producto todavía no tiene precio configurado. Escríbenos y te lo
-        cotizamos ✨
-      </p>
+    accion = (
+      <a href={enlaceWhatsApp(mensaje, whatsapp)} target="_blank" rel="noopener noreferrer" className={BOTON_WHATSAPP}>
+        <IconoWhatsApp tamano={22} />
+        {etiquetaEnlace}
+      </a>
+    );
+  } else {
+    const mezcla =
+      variantes.length > 1 && producto.escalones.length > 1
+        ? `Puedes mezclar ${nombreVariante(etiqueta, 2)}: cuentan ${unaVariante(etiqueta).startsWith("una") ? "juntas" : "juntos"} para el precio.`
+        : null;
+    compra = (
+      <>
+        <PreciosPorCantidad
+          escalones={producto.escalones}
+          unidadesTotales={resumen.unidadesTotales}
+          siguiente={lleno ? null : resumen.siguiente}
+          nota={mezcla}
+        />
+        {producto.stock <= POCAS_UNIDADES && (
+          <p className="mt-3">
+            <Insignia tono="alerta">{`Quedan ${producto.stock}`}</Insignia>
+          </p>
+        )}
+        {lleno ? (
+          <p className="mt-6 text-[15px] leading-5 text-tinta">Ya tienes en tu bolsa todas las unidades disponibles.</p>
+        ) : variantes.length > 0 ? (
+          <div className="mt-7">
+            <SelectorVariantes
+              ref={selector}
+              variantes={variantes}
+              etiqueta={etiqueta}
+              seleccion={seleccion}
+              enBolsa={Object.fromEntries(lineas.map((l) => [l.tonoId ?? "", l.cantidad]))}
+              disponibles={resumen.maxNuevas}
+              alCambiar={alCambiar}
+              error={error}
+              nivelTitulo={variante === "pagina" ? 2 : 3}
+            />
+          </div>
+        ) : (
+          <div className="mt-7">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-base font-semibold leading-6 text-tinta">Cantidad</p>
+              <Stepper
+                valor={seleccion[CLAVE_UNICA] ?? 0}
+                min={1}
+                max={resumen.maxNuevas}
+                onCambiar={(n) => alCambiar(CLAVE_UNICA, n)}
+                etiqueta={producto.nombre}
+              />
+            </div>
+            {error && <p className="mt-2 text-sm leading-5 text-error">{error}</p>}
+          </div>
+        )}
+      </>
+    );
+    accion = lleno ? (
+      <BotonEnlace href="/carrito" tamano="grande" ancho>
+        Ver bolsa
+      </BotonEnlace>
+    ) : (
+      <Boton tamano="grande" ancho onClick={alPulsar}>
+        {resumen.unidadesNuevas > 0 && <IconoBolsa tamano={22} />}
+        {resumen.unidadesNuevas > 0
+          ? `Agregar ${resumen.unidadesNuevas} · ${pesos(resumen.subtotalNuevas)}`
+          : `Elige ${unaVariante(etiqueta)}`}
+      </Boton>
     );
   }
 
-  const tonos = producto.variantes ?? [];
-  const necesitaTono = tonos.length > 0 || producto.numVariantes > 0;
-  const puedeAgregar = disponible > 0 && (!necesitaTono || tono !== null);
-
-  // Los tonos comparten escalón: lo que ya está en la bolsa cuenta para
-  // el precio de lo que se va a agregar ahora.
-  const cantidadResultante = yaEnBolsa + cantidad;
-  const unitarioAlAgregar = precioUnitarioPara(producto.escalones, cantidadResultante);
-  const subtotal = unitarioAlAgregar * cantidad;
-
-  // Precio al que están saliendo las unidades que ya tiene en la bolsa.
-  const unitarioEnBolsa = precioUnitarioPara(producto.escalones, Math.max(1, yaEnBolsa));
-
-  const upsell = sugerenciaUpsell(producto.escalones, cantidadResultante);
-  const puedeLlegarAlUpsell = upsell !== null && upsell.nuevaCantidad <= producto.stock;
-
-  function alAgregar() {
-    agregar(producto.id, cantidad, tono);
-    setAgregado(true);
-    setCantidad(1);
-
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-      navigator.vibrate?.(12);
-    }
-
-    setTimeout(() => setAgregado(false), 1800);
-  }
+  const enBolsa = lineas.reduce((total, l) => total + l.cantidad, 0);
 
   return (
-    <div className="space-y-5">
-      <TablaEscalones escalones={producto.escalones} cantidadActual={cantidadResultante} />
-
-      {necesitaTono && (
-        <div className="space-y-3 rounded-tarjeta bg-petalo p-4 shadow-petalo">
-          <h2 id="titulo-tonos-detalle" className="font-display text-lg text-carbon">
-            Elige tu tono
-            <span className="pl-1 font-sans text-base font-normal text-carbon-suave">
-              ({tonos.length})
-            </span>
-          </h2>
-          <SelectorTonos
-            tonos={tonos}
-            elegido={tono}
-            alElegir={setTono}
-            idEtiqueta="titulo-tonos-detalle"
-          />
-        </div>
-      )}
-
-      <div className="space-y-2 rounded-tarjeta bg-petalo p-4 shadow-petalo">
-        <h2 className="text-center font-display text-lg text-carbon">¿Cuántas llevas?</h2>
-        <SelectorCantidad
-          valor={cantidad}
-          cantidadMaxima={Math.max(1, disponible)}
-          alCambiar={setCantidad}
-        />
-      </div>
-
-      {puedeLlegarAlUpsell && (
-        <p
-          role="status"
-          className="rounded-tarjeta bg-lila-suave/40 px-4 py-3 text-center text-[15px] text-lila-texto"
-        >
-          ✨ ¡Suma {upsell.unidadesFaltantes} más y te salen a{" "}
-          <strong>{pesos(upsell.nuevoPrecioUnitario)} c/u</strong>!
-          <br />
-          Ahorras <strong>{pesos(upsell.ahorro)}</strong>
-        </p>
-      )}
-
-      {disponible === 0 ? (
-        <p className="text-center font-semibold text-alerta">
-          Ya tienes en tu bolsa todo el stock disponible
-        </p>
-      ) : (
-        producto.stock <= 5 && (
-          <p className="text-center font-semibold text-alerta">
-            Quedan solo {producto.stock} disponibles
+    <div className="flex flex-col">
+      {compra}
+      {enBolsa > 0 && (
+        <div className="mt-6 flex min-h-12 items-center justify-between gap-3 rounded-md bg-ahorro-fondo pl-3 pr-1">
+          <p className="flex items-center gap-2 text-[15px] font-medium leading-5 text-ahorro">
+            <IconoCheck tamano={20} />
+            <span>{`${enBolsa} en tu bolsa`}</span>
           </p>
-        )
-      )}
-
-      <Boton ancho tamano="grande" onClick={alAgregar} disabled={!puedeAgregar}>
-        {agregado ? (
-          <>
-            <IconoCheck /> ¡Agregado a tu bolsa!
-          </>
-        ) : !puedeAgregar && necesitaTono && !tono ? (
-          "Elige un tono primero"
-        ) : (
-          <>
-            <IconoBolsa /> Agregar · {pesos(subtotal)}
-          </>
-        )}
-      </Boton>
-
-      {/* Al cambiar de tono se pierde de vista lo ya agregado en los otros
-          tonos: este resumen lo deja siempre visible, cada tono aparte. */}
-      {lineasDeEsteProducto.length > 0 && (
-        <div className="rounded-tarjeta bg-rosa-nube p-4">
-          <p className="pb-2 font-semibold text-carbon">En tu bolsa de este producto</p>
-          <ul className="space-y-1">
-            {lineasDeEsteProducto.map((l) => (
-              <li
-                key={l.tonoId ?? "sin-tono"}
-                className="flex items-center justify-between gap-2"
-              >
-                <span className="min-w-0 flex-1 truncate text-[15px] text-carbon">
-                  {l.tonoNombre ?? "Sin tono"} · x{l.cantidad}
-                </span>
-                <span className="shrink-0 font-bold text-fucsia-texto">
-                  {pesos(unitarioEnBolsa * l.cantidad)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => establecer(producto.id, l.tonoId, 0)}
-                  aria-label={`Quitar ${l.tonoNombre ?? producto.nombre} de la bolsa`}
-                  className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center
-                             rounded-full text-carbon-suave transition hover:bg-petalo
-                             hover:text-fucsia-texto"
-                >
-                  <IconoBasura className="h-5 w-5" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          {!lleno && (
+            <Link
+              href="/carrito"
+              className="flex min-h-11 items-center rounded-md px-3 text-[15px] font-semibold text-tinta underline
+                         decoration-1 underline-offset-4"
+            >
+              Ver bolsa
+            </Link>
+          )}
         </div>
       )}
+      {children}
+      {/* En la hoja, el pie se pega al borde del panel y no al de su relleno de 1 rem. */}
+      <div
+        data-pie-fijo={modal?.cerrando ? undefined : ""}
+        className={`sticky z-10 -mx-4 mt-8 border-t border-linea bg-fondo px-4 pt-3
+                    pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:-mx-2 md:px-2
+                    ${variante === "modal" ? "-bottom-4" : "bottom-0"}`}
+      >
+        {accion}
+      </div>
     </div>
+  );
+}
+
+function PrecioUnidad({ precio }: { precio: number }) {
+  return (
+    <p className="text-2xl font-bold leading-[30px] tabular-nums text-tinta">
+      {pesos(precio)} <span className="text-base font-normal text-tinta-suave">c/u</span>
+    </p>
   );
 }
