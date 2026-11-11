@@ -1,132 +1,117 @@
 "use client";
 
-import { useState } from "react";
-import { TarjetaProducto } from "./TarjetaProducto";
+import { useRef, useState, type MouseEvent } from "react";
+import { flushSync } from "react-dom";
+import { CELDA_TARJETA, TarjetaProducto } from "@/components/catalogo/TarjetaProducto";
 import { Boton } from "@/components/ui/Boton";
 import { EsqueletoTarjeta } from "@/components/ui/Esqueleto";
-import { IconoFlechaAbajo, IconoBuscar } from "@/components/ui/Iconos";
-import { cargarMasProductos } from "@/app/acciones-catalogo";
-import type { OrdenCatalogo, Producto } from "@/lib/types";
+import { urlCatalogo } from "@/lib/rutas";
+import type { OrdenCatalogo, PaginaProductos, Producto } from "@/lib/types";
 
-/**
- * La grilla del catálogo, por tandas.
- *
- * Antes se pintaban TODOS los productos activos de una sola vez: con 591
- * en la tienda eso eran 591 componentes de React, 591 imágenes y 591
- * suscripciones al carrito en la misma pantalla. El celular no daba
- * abasto y el catálogo "se trababa" antes incluso de tocar nada.
- *
- * Ahora llegan de 24 en 24. La primera tanda viene renderizada desde el
- * servidor (aparece al instante, buena para Google); las siguientes las
- * pide este componente y las añade al final, sin navegar, para no perder
- * el scroll ni el sitio en la lista.
- *
- * El botón es explícito y no scroll infinito: con scroll infinito nunca
- * se llega al pie y la clienta no sabe cuánto falta. El contador
- * ("24 de 591") le dice exactamente dónde está.
- */
-export function ListaProductos({
-  inicial,
-  total,
-  hayMasInicial,
-  filtros,
-}: {
+// El mismo tope que aplica obtenerProductos: después de la 10 la API repite la última página.
+const PAGINA_MAXIMA = 10;
+// Sin gap vertical en la grilla: las tarjetas son subgrids y lo heredarían entre sus 5 filas.
+const SEPARACION_FILAS = "pb-6 lg:pb-10";
+
+type Filtros = { categoria: string | null; q: string | null; orden: OrdenCatalogo };
+
+type Props = {
   inicial: Producto[];
   total: number;
-  hayMasInicial: boolean;
-  filtros: { busqueda?: string; categoriaSlug?: string; orden?: OrdenCatalogo };
-}) {
-  const [productos, setProductos] = useState(inicial);
-  const [pagina, setPagina] = useState(0);
-  const [hayMas, setHayMas] = useState(hayMasInicial);
-  const [cargando, setCargando] = useState(false);
-  const [fallo, setFallo] = useState<string | null>(null);
+  /** Última página que trae `inicial` (el servidor pinta 1..N si la URL llega con `?pagina=N`). */
+  pagina: number;
+  filtros: Filtros;
+};
 
-  async function verMas() {
-    setCargando(true);
-    setFallo(null);
+/** Deja la página en la URL sin navegar: al recargar o compartir, el servidor pinta lo mismo. */
+function recordarPagina(pagina: number) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("pagina", String(pagina));
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+export function ListaProductos({ inicial, total: totalInicial, pagina: paginaInicial, filtros }: Props) {
+  const [productos, setProductos] = useState(inicial);
+  const [total, setTotal] = useState(totalInicial);
+  const [pagina, setPagina] = useState(paginaInicial);
+  const [estado, setEstado] = useState<"quieta" | "cargando" | "fallo">("quieta");
+  const pidiendo = useRef(false);
+  const lista = useRef<HTMLUListElement>(null);
+
+  const faltan = productos.length < total;
+  const puedePedir = faltan && pagina < PAGINA_MAXIMA;
+
+  async function verMas(evento: MouseEvent<HTMLButtonElement>) {
+    if (pidiendo.current) return;
+    pidiendo.current = true;
+    const teniaFoco = evento.currentTarget === document.activeElement;
+    const siguiente = pagina + 1;
+    setEstado("cargando");
 
     try {
-      const siguiente = pagina + 1;
-      const resultado = await cargarMasProductos({ ...filtros, pagina: siguiente });
+      const respuesta = await fetch(`/api/catalogo${urlCatalogo({ ...filtros, pagina: siguiente }).slice(1)}`);
+      if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+      const datos: PaginaProductos = await respuesta.json();
 
-      setProductos((previos) => {
-        // Cinturón y tirantes: si dos toques rápidos piden la misma
-        // página, no se duplica ningún producto en la lista.
-        const vistos = new Set(previos.map((p) => p.id));
-        return [...previos, ...resultado.productos.filter((p) => !vistos.has(p.id))];
+      const vistos = new Set(productos.map((p) => p.id));
+      const nuevos = datos.productos.filter((p) => !vistos.has(p.id));
+      flushSync(() => {
+        setProductos([...productos, ...nuevos]);
+        setPagina(siguiente);
+        // Sin nada nuevo (el catálogo se encogió) se da por vista toda la lista.
+        setTotal(nuevos.length > 0 ? datos.total : productos.length);
+        setEstado("quieta");
       });
-      setPagina(siguiente);
-      setHayMas(resultado.pagina * resultado.porPagina < resultado.total);
+      recordarPagina(siguiente);
+      if (teniaFoco) lista.current?.children[productos.length]?.querySelector("a")?.focus();
     } catch {
-      setFallo("No pudimos traer más productos. Revisa tu conexión e inténtalo de nuevo.");
+      setEstado("fallo");
     } finally {
-      setCargando(false);
+      pidiendo.current = false;
     }
   }
 
-  if (productos.length === 0) {
-    return <SinResultados busqueda={filtros.busqueda} />;
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-        {productos.map((p) => (
-          <TarjetaProducto key={p.id} producto={p} />
+    <div>
+      <ul ref={lista} className="grid grid-cols-2 gap-x-3 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6">
+        {productos.map((producto, i) => (
+          <li key={producto.id} className={`${CELDA_TARJETA} ${SEPARACION_FILAS}`}>
+            <TarjetaProducto producto={producto} indice={i} />
+          </li>
         ))}
+        {estado === "cargando" &&
+          Array.from({ length: 4 }, (_, i) => (
+            <li key={`cargando-${i}`} aria-hidden="true" className={`row-span-5 ${SEPARACION_FILAS}`}>
+              <EsqueletoTarjeta />
+            </li>
+          ))}
+      </ul>
 
-        {cargando &&
-          Array.from({ length: 4 }, (_, i) => <EsqueletoTarjeta key={`carga-${i}`} />)}
-      </div>
-
-      <div className="space-y-3 text-center">
-        <p aria-live="polite" className="text-sm text-carbon-suave">
-          Viendo {productos.length} de {total}{" "}
-          {total === 1 ? "producto" : "productos"}
+      <div className="mt-4 flex flex-col items-center gap-3 text-center">
+        <p aria-live="polite" className="text-sm leading-5 text-tinta-suave tabular-nums">
+          Viendo {productos.length} de {total}
         </p>
-
-        {fallo && (
-          <p role="alert" className="rounded-suave bg-fucsia/10 px-4 py-3 text-fucsia-texto">
-            {fallo}
+        {estado === "fallo" && (
+          <p role="alert" className="text-sm font-medium leading-5 text-error">
+            No se pudo cargar.
           </p>
         )}
-
-        {hayMas && (
-          <Boton variante="secundario" onClick={verMas} cargando={cargando}>
-            {!cargando && <IconoFlechaAbajo className="h-5 w-5" />}
-            {cargando ? "Trayendo más…" : "Ver más productos"}
+        {puedePedir && (
+          <Boton
+            variante="secundario"
+            cargando={estado === "cargando"}
+            onClick={verMas}
+            className="w-full sm:w-auto sm:min-w-72"
+          >
+            {estado === "fallo" ? "Volver a intentar" : "Ver más productos"}
           </Boton>
         )}
-
-        {!hayMas && productos.length > 12 && (
-          <p className="text-sm text-carbon-suave">
-            Ya viste todo el catálogo ♡
+        {faltan && !puedePedir && (
+          <p className="max-w-xs text-sm leading-5 text-tinta-suave">
+            Para ver el resto, elige una categoría o busca por nombre o referencia.
           </p>
         )}
       </div>
-    </div>
-  );
-}
-
-function SinResultados({ busqueda }: { busqueda?: string }) {
-  return (
-    <div className="space-y-3 py-20 text-center">
-      <p className="flex justify-center text-lila-suave">
-        <IconoBuscar className="h-14 w-14" />
-      </p>
-
-      <p className="font-display text-2xl text-carbon">
-        {busqueda
-          ? `No encontramos nada con «${busqueda}»`
-          : "Aquí todavía no hay productos"}
-      </p>
-
-      <p className="mx-auto max-w-sm text-carbon-suave">
-        {busqueda
-          ? "Prueba con una palabra más corta, o con la referencia del producto."
-          : "Elige otra categoría para seguir viendo."}
-      </p>
     </div>
   );
 }

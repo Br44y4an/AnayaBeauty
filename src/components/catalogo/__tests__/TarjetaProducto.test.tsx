@@ -1,141 +1,131 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { TarjetaProducto } from "@/components/catalogo/TarjetaProducto";
 import { useCarrito } from "@/lib/cart";
 import type { Producto } from "@/lib/types";
 
-const base: Producto = {
-  id: "p1",
-  referencia: "REF-101",
-  nombre: "Labial Rojo Pasión",
-  descripcion: null,
-  categoriaId: null,
-  categoriaNombre: null,
-  categoriaSlug: null,
-  imagenPrincipal: null,
-  galeria: [],
-  stock: 10,
-  activo: true,
-  destacado: false,
-  escalones: [
-    { minCantidad: 1, precioUnitario: 10000 },
-    { minCantidad: 3, precioUnitario: 9000 },
-  ],
-  etiquetaVariante: "Tono",
-  numVariantes: 0,
-  variantes: null,
-};
-
-/** Un producto con paleta. La tarjeta solo sabe CUÁNTOS tonos hay. */
-const conTonos: Producto = { ...base, id: "p2", referencia: "REF-202", numVariantes: 24 };
+function producto(cambios: Partial<Producto> = {}): Producto {
+  return {
+    id: "p1",
+    referencia: "AC80/150",
+    nombre: "Brillo labial Oil Glazed Shine",
+    descripcion: null,
+    categoriaId: "c1",
+    categoriaNombre: "Lip gloss",
+    categoriaSlug: "lip-gloss",
+    imagenPrincipal: null,
+    galeria: [],
+    stock: 50,
+    activo: true,
+    destacado: false,
+    escalones: [
+      { minCantidad: 1, precioUnitario: 8000 },
+      { minCantidad: 3, precioUnitario: 7500 },
+      { minCantidad: 6, precioUnitario: 6500 },
+    ],
+    etiquetaVariante: "Tono",
+    numVariantes: 0,
+    variantes: null,
+    ...cambios,
+  };
+}
 
 describe("TarjetaProducto", () => {
   beforeEach(() => useCarrito.getState().vaciar());
 
-  it("NO pinta la paleta de tonos en la grilla", () => {
-    // La queja original: "estoy obligada a ver los tonos de productos que
-    // no quiero". Con 24 tonos por tarjeta y 24 tarjetas por pantalla,
-    // el catálogo era un muro de círculos de colores.
-    render(<TarjetaProducto producto={conTonos} />);
+  it("foto y nombre van en un mismo enlace a la ficha, con la referencia codificada", () => {
+    render(<TarjetaProducto producto={producto({ imagenPrincipal: "/foto.jpg" })} />);
 
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
-    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    const enlace = screen.getByText("Brillo labial Oil Glazed Shine").closest("a");
+    expect(enlace).toHaveAttribute("href", "/producto/AC80%2F150");
+    expect(enlace?.querySelector("img")).not.toBeNull();
   });
 
-  it("ofrece abrir la paleta en vez de mostrarla", () => {
-    render(<TarjetaProducto producto={conTonos} />);
-    expect(screen.getByRole("button", { name: /elegir tono/i })).toBeInTheDocument();
+  it("muestra «Ref.», el precio de una unidad con «c/u» y el escalón siguiente", () => {
+    render(<TarjetaProducto producto={producto()} />);
+
+    expect(screen.getByText("Ref. AC80/150")).toBeInTheDocument();
+    expect(screen.getByText("$8.000")).toBeInTheDocument();
+    expect(screen.getByText("c/u")).toBeInTheDocument();
+    expect(screen.getByText("3 o más: $7.500 c/u")).toBeInTheDocument();
   });
 
-  it("deja sumar desde la tarjeta cuando el producto no tiene tonos", () => {
-    // Sin tonos no hay nada que decidir: durante un live, entrar al
-    // detalle por cada producto es fricción pura.
-    render(<TarjetaProducto producto={base} />);
+  it("con un solo escalón no habla de precio por cantidad", () => {
+    render(<TarjetaProducto producto={producto({ escalones: [{ minCantidad: 1, precioUnitario: 80000 }] })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^agregar$/i }));
-
-    expect(useCarrito.getState().lineas).toEqual([
-      { productoId: "p1", tonoId: null, tonoNombre: null, cantidad: 1 },
-    ]);
+    expect(screen.getByText("$80.000")).toBeInTheDocument();
+    expect(screen.queryByText(/o más/)).not.toBeInTheDocument();
   });
 
-  it("cambia a sumar y restar una vez hay algo en la bolsa", () => {
-    render(<TarjetaProducto producto={base} />);
-    fireEvent.click(screen.getByRole("button", { name: /^agregar$/i }));
+  it("con 6 tonos la acción es el enlace «Elegir tono · 6» a la ficha", () => {
+    render(<TarjetaProducto producto={producto({ numVariantes: 6 })} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /agregar uno de/i }));
-    expect(useCarrito.getState().lineas[0].cantidad).toBe(2);
-
-    fireEvent.click(screen.getByRole("button", { name: /quitar uno de/i }));
-    expect(useCarrito.getState().lineas[0].cantidad).toBe(1);
-  });
-
-  it("muestra el precio que se está cobrando ahora, no el más barato del combo", () => {
-    // Pintar el precio del combo confundía: no coincidía con el cobro.
-    render(<TarjetaProducto producto={base} />);
-    expect(screen.getByText(/\$10\.000/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$9\.000/)).not.toBeInTheDocument();
-  });
-
-  it("baja el precio en pantalla al alcanzar el escalón", () => {
-    useCarrito.getState().agregar("p1", 3);
-    render(<TarjetaProducto producto={base} />);
-
-    expect(screen.getByText(/\$9\.000/)).toBeInTheDocument();
-  });
-
-  it("no deja pasar del stock disponible", () => {
-    const casiAgotado = { ...base, id: "p3", stock: 1 };
-    render(<TarjetaProducto producto={casiAgotado} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^agregar$/i }));
-    expect(screen.getByRole("button", { name: /agregar uno de/i })).toBeDisabled();
-  });
-
-  it("marca el producto agotado y no ofrece agregarlo", () => {
-    const agotado = { ...base, id: "p4", stock: 0 };
-    render(<TarjetaProducto producto={agotado} />);
-
-    expect(screen.getByText(/agotado/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^agregar$/i })).not.toBeInTheDocument();
-  });
-
-  it("avisa cuando un producto todavía no tiene precio, sin ofrecerlo", () => {
-    const sinPrecio = { ...base, id: "p5", escalones: [] };
-    render(<TarjetaProducto producto={sinPrecio} />);
-
-    expect(screen.getByText(/precio por confirmar/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^agregar$/i })).not.toBeInTheDocument();
-  });
-
-  it("escapa la referencia en el enlace al detalle", () => {
-    // Hay referencias con "/" (ACRYLIC80/150): sin escapar, la ruta se
-    // parte en dos y el producto da 404 desde el catálogo.
-    const conBarra = { ...base, id: "p6", referencia: "ACRYLIC80/150" };
-    render(<TarjetaProducto producto={conBarra} />);
-
-    expect(screen.getByRole("link", { name: conBarra.nombre })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Elegir tono · 6" })).toHaveAttribute(
       "href",
-      "/producto/ACRYLIC80%2F150"
+      "/producto/AC80%2F150"
     );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("solo cuenta lo suyo: lo de otro producto no aparece en esta tarjeta", () => {
-    useCarrito.getState().agregar("otro-producto", 5);
-    render(<TarjetaProducto producto={base} />);
+  it("la acción usa la etiqueta del producto: «Elegir color · 4»", () => {
+    render(<TarjetaProducto producto={producto({ numVariantes: 4, etiquetaVariante: "Color" })} />);
 
-    expect(screen.queryByText(/en tu bolsa/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Elegir color · 4" })).toBeInTheDocument();
   });
 
-  it("muestra cuántas lleva de este producto, sumando sus tonos", () => {
-    useCarrito.getState().agregar("p2", 2, { id: "t1", nombre: "Rubí" });
-    useCarrito.getState().agregar("p2", 1, { id: "t2", nombre: "Vino" });
+  it("agotado: etiqueta «Agotado» y nada para agregar ni elegir", () => {
+    render(<TarjetaProducto producto={producto({ stock: 0, numVariantes: 6 })} />);
 
-    render(<TarjetaProducto producto={conTonos} />);
+    expect(screen.getByText("Agotado")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /elegir/i })).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByText(/3 en tu bolsa/i)).toBeInTheDocument();
-    // Con algo ya elegido, el botón invita a corregir, no a empezar.
-    expect(screen.getByRole("button", { name: /cambiar/i })).toBeInTheDocument();
+  it("sin escalones: «Precio por confirmar», sin cifras y sin botón", () => {
+    render(<TarjetaProducto producto={producto({ escalones: [] })} />);
+
+    expect(screen.getByText("Precio por confirmar")).toBeInTheDocument();
+    expect(screen.queryByText(/\$|NaN|undefined/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("con stock 3 avisa «Quedan 3»; con stock de sobra no", () => {
+    const { rerender } = render(<TarjetaProducto producto={producto({ stock: 3 })} />);
+    expect(screen.getByText("Quedan 3")).toBeInTheDocument();
+
+    rerender(<TarjetaProducto producto={producto({ stock: 40 })} />);
+    expect(screen.queryByText(/quedan/i)).not.toBeInTheDocument();
+  });
+
+  it("no lleva la insignia «Combo»", () => {
+    render(<TarjetaProducto producto={producto()} />);
+    expect(screen.queryByText(/combo/i)).not.toBeInTheDocument();
+  });
+
+  it("dice cuántas unidades de este producto hay en la bolsa, sumando sus tonos", () => {
+    useCarrito.getState().agregar("p1", 2, { id: "t1", nombre: "Tono 1" });
+    useCarrito.getState().agregar("p1", 1, { id: "t2", nombre: "Tono 2" });
+    useCarrito.getState().agregar("otro", 5);
+
+    render(<TarjetaProducto producto={producto({ numVariantes: 6 })} />);
+
+    expect(screen.getByText("3 en tu bolsa")).toBeInTheDocument();
+  });
+
+  it("sin foto, la tesela lo dice en vez de quedar vacía", () => {
+    render(<TarjetaProducto producto={producto()} />);
+    expect(screen.getByText("Sin foto")).toBeInTheDocument();
+  });
+
+  it("compacta (riel de destacados): un solo enlace a la ficha con nombre y precio, sin acción", () => {
+    render(<TarjetaProducto producto={producto({ numVariantes: 6 })} compacta />);
+
+    const enlaces = screen.getAllByRole("link");
+    expect(enlaces).toHaveLength(1);
+    expect(enlaces[0]).toHaveAttribute("href", "/producto/AC80%2F150");
+    expect(enlaces[0]).toHaveTextContent("Brillo labial Oil Glazed Shine");
+    expect(enlaces[0]).toHaveTextContent("$8.000");
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
