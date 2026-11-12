@@ -349,8 +349,9 @@ Store pequeño: `mostrarAviso({ titulo, detalle?, imagen?, accion?: { etiqueta, 
   `etiquetaPorDefecto(slugDepartamento)`: rostro/ojos-y-cejas/labios → Tono; resto → Color.
 - `pluralVariante(etiqueta, n)`: «1 tono», «6 tonos», «4 colores», «3 diseños», «2 modelos», «5 aromas», «3 largos»,
   «4 paletas».
-- `muestrasConfiables(variantes)`: false si algún hex falta o es inválido, si alguno es el valor por defecto del formulario
-  (#E5308A), o si algún par tiene ΔE76 < 10 (Lab). Si es false, no se pinta ningún círculo de ese producto.
+- `colorDeMuestra(variante)`: color del círculo de cada tono, o null si el hex es inválido o es el fucsia por defecto del
+  formulario (#E5308A) en un tono que no se llama fucsia ni rosado. `tieneMuestras(variantes)`: algún tono tiene color.
+  (Cambio del 12-nov a pedido del dueño: antes se ocultaban todos los círculos de un producto si dos colores se parecían.)
 - `esNumeracionDeFoto(variantes)`: true si todos los nombres son «Tono N» o «Tono N …».
 - `tonos.ts` conserva `hexAHsl`, `necesitaBorde`, `filtrarTonos`; se borran `agruparTonos` del uso de la UI y
   `textoSobre` (código muerto).
@@ -517,7 +518,7 @@ textos en el componente que los usa (sin archivo global de textos); sin `as unkn
 - Vitest con entorno `node` por defecto; `// @vitest-environment jsdom` solo en pruebas de componentes.
 - Conservar sin cambios de comportamiento las pruebas de pricing, discounts, reconciliar, busqueda (ampliada), paginacion,
   csv, slug, imagen, storage, send-order, order-template (textos sin «Código usado»).
-- Nuevas: compra (resumenDeCompra), variantes (etiqueta, plural, muestrasConfiables, esNumeracionDeFoto), categorias
+- Nuevas: compra (resumenDeCompra), variantes (etiqueta, plural, colorDeMuestra, esNumeracionDeFoto), categorias
   (árbol, ids), busqueda (grupos, sinónimos, referencia compacta), cart (renombre, restaurar, sincronización), celular,
   mensajes de error, validación de `confirmarPedido`, contraste con tokens nuevos, y componentes: TarjetaProducto,
   SelectorVariantes, PanelCompra, BusquedaRapida, VistaBolsa (reintento real, deshacer), Avisos.

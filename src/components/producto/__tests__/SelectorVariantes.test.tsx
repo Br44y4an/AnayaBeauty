@@ -103,20 +103,29 @@ describe("SelectorVariantes", () => {
     expect(screen.getByText(/No encontramos "azul"/)).toBeInTheDocument();
   });
 
-  it("sin muestras confiables no pinta ningún círculo", () => {
+  it("pinta el color de cada tono aunque dos se parezcan", () => {
     pintar([
       variante("a", "Rosado", 0, { colorHex: "#ffb8db" }),
       variante("b", "Rosado claro", 1, { colorHex: "#ffbadb" }),
     ]);
-    expect(screen.queryAllByTestId("muestra")).toHaveLength(0);
+    const muestras = screen.getAllByTestId("muestra");
+    expect(muestras).toHaveLength(2);
+    expect(muestras[0]).toHaveStyle({ backgroundColor: "#ffb8db" });
   });
 
-  it("con muestras confiables pinta un círculo por fila", () => {
+  it("un tono sin color real no lleva círculo, pero la fila queda alineada", () => {
     pintar([
-      variante("a", "Rosado", 0, { colorHex: "#ffb8db" }),
-      variante("b", "Azul", 1, { colorHex: "#a8b7ff" }),
+      variante("a", "Tono 1", 0, { colorHex: "#c00000" }),
+      variante("b", "Tono 2", 1, { colorHex: "#e5308a" }),
     ]);
-    expect(screen.queryAllByTestId("muestra")).toHaveLength(2);
+    expect(screen.getAllByTestId("muestra")).toHaveLength(1);
+    expect(screen.getAllByTestId("sin-muestra")).toHaveLength(1);
+  });
+
+  it("si ningún tono tiene color real, no hay círculos ni huecos", () => {
+    pintar([variante("a", "Tono 1", 0, { colorHex: "#e5308a" }), variante("b", "Tono 2", 1, { colorHex: "#e5308a" })]);
+    expect(screen.queryAllByTestId("muestra")).toHaveLength(0);
+    expect(screen.queryAllByTestId("sin-muestra")).toHaveLength(0);
   });
 
   it("con nombres «Tono N» explica que la numeración es la de la foto", () => {

@@ -5,7 +5,7 @@ import type { VarianteEditable } from "@/lib/admin/variantes";
 
 export type FilaEditable = VarianteEditable & { clave: string };
 
-/** El color que traía el formulario viejo: la tienda lo toma como «sin elegir» (`muestrasConfiables`). */
+/** El color que traía el formulario viejo: la tienda lo toma como «sin elegir» (`colorDeMuestra`), salvo en un tono que se llame fucsia o rosado. */
 export const SIN_COLOR = "#e5308a";
 
 const BOTON_ICONO =

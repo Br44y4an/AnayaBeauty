@@ -3,7 +3,8 @@ import {
   ETIQUETAS_VARIANTE,
   esNumeracionDeFoto,
   etiquetaPorDefecto,
-  muestrasConfiables,
+  colorDeMuestra,
+  tieneMuestras,
   nombreVariante,
   pluralVariante,
   resolverEtiqueta,
@@ -128,33 +129,40 @@ describe("resolverEtiqueta", () => {
   });
 });
 
-describe("muestrasConfiables", () => {
-  it("acepta colores válidos y bien distintos", () => {
-    expect(muestrasConfiables(hex("#FF0000", "#00FF00"))).toBe(true);
-    expect(muestrasConfiables(hex("#c00000"))).toBe(true);
+describe("colorDeMuestra", () => {
+  const tono = (nombre: string, colorHex: string) => ({ nombre, colorHex });
+
+  it("devuelve el color real del tono, normalizado", () => {
+    expect(colorDeMuestra(tono("Tono 3", "#C00000"))).toBe("#c00000");
+    expect(colorDeMuestra(tono("Nude", "d8b49c"))).toBe("#d8b49c");
   });
 
-  it("rechaza el valor por defecto del formulario", () => {
-    expect(muestrasConfiables(hex("#FF0000", "#e5308a"))).toBe(false);
-    expect(muestrasConfiables(hex("#E5308A"))).toBe(false);
+  it("muestra los tonos aunque dos colores se parezcan", () => {
+    expect(colorDeMuestra(tono("Tono 8", "#FF0000"))).toBe("#ff0000");
+    expect(colorDeMuestra(tono("Tono 9", "#FE0101"))).toBe("#fe0101");
   });
 
-  it("rechaza dos muestras que a la vista son el mismo color", () => {
-    expect(muestrasConfiables(hex("#FF0000", "#FE0101"))).toBe(false);
+  it("el fucsia que trae el formulario solo cuenta si el tono se llama así", () => {
+    expect(colorDeMuestra(tono("Tono 2", "#E5308A"))).toBeNull();
+    expect(colorDeMuestra(tono("Celeste", "#e5308a"))).toBeNull();
+    expect(colorDeMuestra(tono("Fucsia", "#E5308A"))).toBe("#e5308a");
+    expect(colorDeMuestra(tono("Rosado claro", "#e5308a"))).toBe("#e5308a");
   });
 
-  it("pone el límite en una diferencia de color (ΔE76) de 10", () => {
-    expect(muestrasConfiables(hex("#d8b49c", "#c9a086"))).toBe(false); // ΔE ≈ 7,5
-    expect(muestrasConfiables(hex("#d8b49c", "#bf9677"))).toBe(true); // ΔE ≈ 12
+  it("lo que no es un color no se pinta", () => {
+    expect(colorDeMuestra(tono("Tono 1", "rojo"))).toBeNull();
+    expect(colorDeMuestra(tono("Tono 1", ""))).toBeNull();
+  });
+});
+
+describe("tieneMuestras", () => {
+  it("basta con un tono de color real", () => {
+    expect(tieneMuestras([{ nombre: "Tono 1", colorHex: "#e5308a" }, { nombre: "Tono 2", colorHex: "#c00000" }])).toBe(true);
   });
 
-  it("rechaza lo que no es un color", () => {
-    expect(muestrasConfiables(hex("rojo"))).toBe(false);
-    expect(muestrasConfiables(hex("#FF0000", ""))).toBe(false);
-  });
-
-  it("no hay muestras confiables sin variantes", () => {
-    expect(muestrasConfiables([])).toBe(false);
+  it("sin colores reales no hay círculos", () => {
+    expect(tieneMuestras([{ nombre: "Tono 1", colorHex: "#e5308a" }])).toBe(false);
+    expect(tieneMuestras([])).toBe(false);
   });
 });
 

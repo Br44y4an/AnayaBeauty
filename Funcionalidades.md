@@ -213,11 +213,12 @@ clienta **debe** elegir al menos una para agregarlo.
   foto».
 - **La foto es la leyenda**: va completa y se amplía con un toque
   (`VisorImagen`).
-- **Círculo de color solo si las muestras son confiables**
-  (`muestrasConfiables`): se descarta si algún hex falta o es inválido, si es
-  el valor por defecto del formulario (#E5308A) o si dos colores se parecen
-  demasiado (ΔE76 < 10 en Lab). Si falla, no se pinta ningún círculo de ese
-  producto. La tarjeta nunca pinta muestras.
+- **Cada tono pinta su color** (`colorDeMuestra`): el círculo sale con el
+  color guardado. Solo se omite si el hex no es válido o si quedó el fucsia que
+  trae el formulario (#E5308A) en un tono que no se llama fucsia ni rosado; esa
+  fila deja el hueco para que los nombres queden alineados. Un producto sin
+  ningún color real no pinta círculos (`tieneMuestras`). La tarjeta del
+  catálogo nunca pinta muestras.
 - `esNumeracionDeFoto(variantes)`: todos los nombres son «Tono N».
 - **Agotado por variante** (`product_shades.agotado`): bandera, no stock. La
   dueña ya no borra tonos para marcarlos agotados (borrar renumera la foto).

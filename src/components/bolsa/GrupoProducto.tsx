@@ -13,7 +13,7 @@ import { pesos } from "@/lib/format";
 import type { Escalon } from "@/lib/pricing";
 import { rutaProducto } from "@/lib/rutas";
 import type { DatosBolsa, ProductoBolsa } from "@/lib/types";
-import { muestrasConfiables } from "@/lib/variantes";
+import { colorDeMuestra } from "@/lib/variantes";
 
 /** El servidor rechaza más de 50 unidades por línea. */
 const MAX_POR_LINEA = 50;
@@ -86,7 +86,6 @@ function quitar({ r, indice }: Grupo["lineas"][number], producto: ProductoBolsa 
 export function GrupoProducto({ grupo }: { grupo: Grupo }) {
   const { producto, unitario } = grupo;
   const nombre = producto?.nombre ?? "Producto no disponible";
-  const conMuestras = producto !== null && muestrasConfiables(producto.variantes);
 
   return (
     <li className="border-b border-linea py-5 first:pt-2">
@@ -127,13 +126,13 @@ export function GrupoProducto({ grupo }: { grupo: Grupo }) {
         {grupo.lineas.map((linea) => {
           const { r } = linea;
           const etiqueta = r.linea.tonoNombre ? `${nombre}, ${r.linea.tonoNombre}` : nombre;
-          const color = producto?.variantes.find((v) => v.id === r.linea.tonoId)?.colorHex ?? null;
+          const variante = producto?.variantes.find((v) => v.id === r.linea.tonoId);
           const max = Math.min(MAX_POR_LINEA, (producto?.stock ?? 0) - (grupo.unidades - r.cantidad));
           return (
             <LineaVariante
               key={`${r.original.productoId}-${r.original.tonoId ?? "sin"}`}
               nombre={r.linea.tonoNombre}
-              colorHex={conMuestras ? color : null}
+              colorHex={variante ? colorDeMuestra(variante) : null}
               cantidad={r.cantidad}
               max={max}
               etiqueta={etiqueta}

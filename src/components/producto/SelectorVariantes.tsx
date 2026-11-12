@@ -5,7 +5,7 @@ import { Insignia } from "@/components/ui/Insignia";
 import { Stepper } from "@/components/ui/Stepper";
 import { IconoAlerta, IconoBuscar, IconoCerrar } from "@/components/ui/Iconos";
 import { filtrarTonos, necesitaBorde } from "@/lib/tonos";
-import { esNumeracionDeFoto, muestrasConfiables, pluralVariante, tituloSelector } from "@/lib/variantes";
+import { colorDeMuestra, esNumeracionDeFoto, pluralVariante, tieneMuestras, tituloSelector } from "@/lib/variantes";
 import type { EtiquetaVariante, Variante } from "@/lib/types";
 
 /** Desde 13 variantes la lista es larga: aparece el buscador y la ficha ensancha la compra en escritorio. */
@@ -27,7 +27,7 @@ type Props = {
 };
 
 // Una fila por variante en el orden guardado, que es el de la foto: agrupar por color desordena la
-// leyenda. Los círculos solo aparecen si todas las muestras del producto son creíbles.
+// leyenda. Cada tono pinta su color; el que nunca tuvo uno real deja el hueco para no desalinear.
 export function SelectorVariantes({
   variantes,
   etiqueta,
@@ -54,7 +54,7 @@ export function SelectorVariantes({
   const ordenadas = [...variantes].sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, "es"));
   const listaLarga = variantes.length >= MINIMO_LISTA_LARGA;
   const visibles = listaLarga ? filtrarTonos(ordenadas, busqueda) : ordenadas;
-  const conMuestras = muestrasConfiables(variantes);
+  const conMuestras = tieneMuestras(variantes);
   const elegidas = Object.values(seleccion).reduce((total, n) => total + n, 0);
   const Titulo = nivelTitulo === 2 ? "h2" : "h3";
 
@@ -168,14 +168,7 @@ function FilaVariante({
       className={`flex min-h-14 items-center gap-3 border-t border-linea px-2 py-1.5 first:border-t-0
                   @min-[32rem]:nth-2:border-t-0 ${cantidad > 0 ? "bg-superficie" : ""}`}
     >
-      {conMuestra && (
-        <span
-          data-testid="muestra"
-          aria-hidden="true"
-          style={{ backgroundColor: v.colorHex }}
-          className={`size-7 shrink-0 rounded-full ring-1 ring-inset ${necesitaBorde(v.colorHex) ? "ring-borde" : "ring-linea"}`}
-        />
-      )}
+      {conMuestra && <Muestra color={colorDeMuestra(v)} />}
       <div className="min-w-0 flex-1">
         <p className={`text-base leading-5 text-balance ${v.agotado ? "text-tinta-suave" : "text-tinta"}`}>{v.nombre}</p>
         {enBolsa > 0 && <p className="mt-0.5 text-[13px] leading-[18px] text-ahorro">En tu bolsa: {enBolsa}</p>}
@@ -193,5 +186,17 @@ function FilaVariante({
         />
       )}
     </li>
+  );
+}
+
+function Muestra({ color }: { color: string | null }) {
+  if (!color) return <span data-testid="sin-muestra" aria-hidden="true" className="size-7 shrink-0" />;
+  return (
+    <span
+      data-testid="muestra"
+      aria-hidden="true"
+      style={{ backgroundColor: color }}
+      className={`size-7 shrink-0 rounded-full ring-1 ring-inset ${necesitaBorde(color) ? "ring-borde" : "ring-linea"}`}
+    />
   );
 }

@@ -6,7 +6,7 @@ import { necesitaBorde } from "@/lib/tonos";
 type Props = {
   /** Nombre de la variante; null en un producto sin variantes. */
   nombre: string | null;
-  /** Solo si las muestras del producto son confiables (si no, ningún círculo). */
+  /** Color real del tono (colorDeMuestra); null si nunca se le eligió uno. */
   colorHex: string | null;
   cantidad: number;
   max: number;

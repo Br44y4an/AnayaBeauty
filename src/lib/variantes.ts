@@ -77,51 +77,21 @@ export function tituloSelector(etiqueta: EtiquetaVariante): string {
   return `Elige ${g.femenino ? "la" : "el"} ${g.singular}`;
 }
 
-/** El color que el formulario del panel trae puesto: casi nunca es el real. */
-const HEX_POR_DEFECTO = "e5308a";
-const DISTANCIA_MINIMA = 10;
+/** El color que el formulario del panel trae puesto: solo es real si el tono se llama así. */
+const HEX_POR_DEFECTO = "#e5308a";
+const NOMBRE_FUCSIA = /fucsia|fuxia|fucia|rosad|rosa|pink|magenta/i;
 
-type Lab = [number, number, number];
-
-function hexALab(hex: string): Lab | null {
-  const limpio = /^#?([0-9a-f]{6})$/i.exec(hex.trim())?.[1].toLowerCase();
-  if (!limpio || limpio === HEX_POR_DEFECTO) return null;
-
-  const lineal = (canal: number) => {
-    const v = canal / 255;
-    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  const [r, g, b] = [0, 2, 4].map((i) => lineal(parseInt(limpio.slice(i, i + 2), 16)));
-
-  // sRGB → XYZ (D65) → CIELAB
-  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
-  const fx = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
-  const fy = f(0.2126 * r + 0.7152 * g + 0.0722 * b);
-  const fz = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
-  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+/** Color del círculo de un tono, o null si nunca se le eligió un color real. */
+export function colorDeMuestra(v: Pick<Variante, "nombre" | "colorHex">): string | null {
+  const limpio = /^#?([0-9a-f]{6})$/i.exec((v.colorHex ?? "").trim())?.[1].toLowerCase();
+  if (!limpio) return null;
+  const hex = `#${limpio}`;
+  return hex === HEX_POR_DEFECTO && !NOMBRE_FUCSIA.test(v.nombre) ? null : hex;
 }
 
-/**
- * Solo se pintan círculos si TODOS los colores son creíbles: hex válido, no
- * el valor por defecto y distinguibles entre sí (ΔE76 ≥ 10).
- */
-export function muestrasConfiables(variantes: Pick<Variante, "colorHex">[]): boolean {
-  if (variantes.length === 0) return false;
-
-  const colores: Lab[] = [];
-  for (const { colorHex } of variantes) {
-    const lab = hexALab(colorHex ?? "");
-    if (!lab) return false;
-    colores.push(lab);
-  }
-
-  for (let i = 0; i < colores.length; i++) {
-    for (let j = i + 1; j < colores.length; j++) {
-      const [a, b] = [colores[i], colores[j]];
-      if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < DISTANCIA_MINIMA) return false;
-    }
-  }
-  return true;
+/** Si al menos un tono tiene color real, el producto pinta círculos. */
+export function tieneMuestras(variantes: Pick<Variante, "nombre" | "colorHex">[]): boolean {
+  return variantes.some((v) => colorDeMuestra(v) !== null);
 }
 
 /** «Tono 1», «Tono 2 modelo K»: el número es la posición en la foto. */
