@@ -3,6 +3,7 @@ import Link from "next/link";
 import { listarPedidos, obtenerPedidoAdmin } from "@/lib/data/orders";
 import { listarProductosAdmin, listarReglasDescuento, obtenerConfiguracion } from "@/lib/data/admin-catalog";
 import { mapearConfiguracion } from "@/lib/data/configuracion";
+import { hoyEnBogota, numeroSugerido } from "@/lib/admin/recibo";
 import { esUuid } from "@/lib/ids";
 import { IconoAtras } from "@/components/ui/Iconos";
 import { ConstructorRecibo } from "./ConstructorRecibo";
@@ -29,6 +30,7 @@ export default async function PaginaRecibos({
   const elegido = pedidoId ? (pedidos.find((p) => p.id === pedidoId) ?? (await obtenerPedidoAdmin(pedidoId))) : null;
   const opciones = elegido && !pedidos.includes(elegido) ? [elegido, ...pedidos] : pedidos;
   const ajustes = mapearConfiguracion(configuracion);
+  const hoy = hoyEnBogota();
 
   return (
     <div className="space-y-6">
@@ -44,9 +46,10 @@ export default async function PaginaRecibos({
 
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold leading-[30px] text-tinta">Recibos</h1>
-        <p className="max-w-2xl text-[15px] leading-6 text-tinta-suave">
-          Arma un recibo desde un pedido o desde cero y descárgalo en PDF para enviarlo por WhatsApp o imprimirlo.
-          El recibo manual solo genera el PDF: no descuenta stock ni crea un pedido.
+        <p className="max-w-3xl text-[15px] leading-6 text-tinta-suave">
+          Arma un recibo desde un pedido o desde cero, elige a nombre de quién va, agrega productos escritos a mano y
+          descárgalo en PDF para enviarlo por WhatsApp o imprimirlo. Solo genera el PDF: no guarda nada, no descuenta
+          stock ni crea un pedido.
         </p>
       </header>
 
@@ -61,6 +64,8 @@ export default async function PaginaRecibos({
         pagoMetodo={ajustes.pago.metodo}
         pagoNumero={ajustes.pago.numero}
         pagoTitular={ajustes.pago.titular}
+        hoy={hoy}
+        numeroInicial={numeroSugerido(hoy)}
       />
     </div>
   );

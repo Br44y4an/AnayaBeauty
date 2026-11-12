@@ -1,34 +1,21 @@
 import { jsPDF } from "jspdf";
+import {
+  cierreDe,
+  datosDePago,
+  encabezadoDocumento,
+  fechaLarga,
+  filasDelTotal,
+  lineasDestinatario,
+  nombreArchivo,
+  textoImprimible as t,
+  type DatosRecibo,
+} from "@/lib/admin/recibo";
 import { pesos } from "@/lib/format";
 import { PALETA } from "@/lib/marca";
 
 /** Recibo en PDF del panel. Se genera en el navegador (jsPDF): sin servidor de por medio. */
 
-export type LineaRecibo = {
-  referencia: string;
-  nombre: string;
-  tono?: string | null;
-  cantidad: number;
-  precioUnitario: number;
-  subtotal: number;
-};
-
-export type DatosRecibo = {
-  numero: string;
-  fecha: Date;
-  clienteNombre: string;
-  clienteWhatsapp?: string | null;
-  clienteCiudad?: string | null;
-  lineas: LineaRecibo[];
-  subtotal: number;
-  descuento: number;
-  porcentaje: number;
-  porMayor: boolean;
-  total: number;
-  pagoMetodo?: string | null;
-  pagoNumero?: string | null;
-  pagoTitular?: string | null;
-};
+export type { DatosRecibo, LineaRecibo } from "@/lib/admin/recibo";
 
 type Rgb = [number, number, number];
 
@@ -42,6 +29,7 @@ const TINTA = rgb(PALETA.tinta);
 const TINTA_SUAVE = rgb(PALETA.tintaSuave);
 const LINEA = rgb(PALETA.linea);
 const SUPERFICIE = rgb(PALETA.superficie);
+const AHORRO = rgb(PALETA.ahorro);
 
 // public/marca/anaya-beauty.png: 349×160.
 const LOGO = { ruta: "/marca/anaya-beauty.png", alto: 44, ancho: (44 * 349) / 160 };
@@ -64,26 +52,29 @@ async function cargarLogoBase64(): Promise<string | null> {
 
 const MARGEN = 40;
 const ALTO_ENCABEZADO = 120;
-const ALTO_PIE = 90;
-
-/** Si no cabe lo que sigue, abre una página nueva y avisa con `saltoDePagina`. */
-function asegurarEspacio(
-  doc: jsPDF,
-  y: number,
-  necesario: number
-): { y: number; saltoDePagina: boolean } {
-  const altoPagina = doc.internal.pageSize.getHeight();
-  if (y + necesario > altoPagina - ALTO_PIE) {
-    doc.addPage();
-    return { y: MARGEN + 10, saltoDePagina: true };
-  }
-  return { y, saltoDePagina: false };
-}
+const ALTO_PIE = 50;
 
 export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const ancho = doc.internal.pageSize.getWidth();
+  const altoPagina = doc.internal.pageSize.getHeight();
+  const util = ancho - MARGEN * 2;
   const logo = await cargarLogoBase64();
+
+  function letra(estilo: "normal" | "bold", tamano: number, color: Rgb = TINTA) {
+    doc.setFont("helvetica", estilo);
+    doc.setFontSize(tamano);
+    doc.setTextColor(...color);
+  }
+
+  // Si no cabe lo que sigue, abre una página nueva; devuelve si la abrió.
+  let y = 0;
+  function asegurar(necesario: number): boolean {
+    if (y + necesario <= altoPagina - ALTO_PIE) return false;
+    doc.addPage();
+    y = MARGEN + 10;
+    return true;
+  }
 
   // ---------- Encabezado ----------
   doc.setFillColor(...SUPERFICIE);
@@ -99,202 +90,169 @@ export async function generarReciboPDF(datos: DatosRecibo): Promise<jsPDF> {
     }
   }
   if (!conLogo) {
-    doc.setTextColor(...TINTA);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
+    letra("bold", 20);
     doc.text("Anaya Beauty", MARGEN, 58);
   }
 
-  doc.setTextColor(...TINTA);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text(`Recibo ${datos.numero}`, ancho - MARGEN, 44, { align: "right" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...TINTA_SUAVE);
-  doc.text(
-    datos.fecha.toLocaleDateString("es-CO", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-      timeZone: "America/Bogota",
-    }),
-    ancho - MARGEN,
-    60,
-    { align: "right" }
-  );
+  letra("bold", 13);
+  const titulo: string[] = doc.splitTextToSize(t(encabezadoDocumento(datos.titulo, datos.numero)), util - LOGO.ancho - 24);
+  titulo.slice(0, 3).forEach((renglon, i) => doc.text(renglon, ancho - MARGEN, 44 + i * 16, { align: "right" }));
+  letra("normal", 10, TINTA_SUAVE);
+  doc.text(fechaLarga(datos.fecha), ancho - MARGEN, 44 + Math.min(titulo.length, 3) * 16, { align: "right" });
 
-  let y = ALTO_ENCABEZADO + 30;
+  y = ALTO_ENCABEZADO + 30;
 
-  // ---------- Datos del cliente ----------
+  // ---------- Dirigido a ----------
+  letra("bold", 12);
+  const nombre: string[] = doc.splitTextToSize(t(datos.destinatario.nombre) || "Cliente", util - 32);
+  const detalle = lineasDestinatario(datos.destinatario).flatMap((l) => doc.splitTextToSize(t(l), util - 32) as string[]);
+  const altoBloque = 34 + nombre.length * 15 + detalle.length * 14 + 6;
   doc.setFillColor(...SUPERFICIE);
-  doc.roundedRect(MARGEN, y, ancho - MARGEN * 2, 56, 8, 8, "F");
-  doc.setTextColor(...TINTA);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text(datos.clienteNombre || "Cliente", MARGEN + 16, y + 22);
-
-  const detalleCliente = [datos.clienteCiudad, datos.clienteWhatsapp]
-    .filter((v) => v && v.trim())
-    .join("  ·  ");
-  if (detalleCliente) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...TINTA_SUAVE);
-    doc.text(detalleCliente, MARGEN + 16, y + 40);
+  doc.roundedRect(MARGEN, y, util, altoBloque, 8, 8, "F");
+  letra("bold", 8, TINTA_SUAVE);
+  doc.text("DIRIGIDO A", MARGEN + 16, y + 18);
+  let yBloque = y + 36;
+  letra("bold", 12);
+  for (const renglon of nombre) {
+    doc.text(renglon, MARGEN + 16, yBloque);
+    yBloque += 15;
   }
-
-  y += 80;
+  letra("normal", 10, TINTA_SUAVE);
+  for (const renglon of detalle) {
+    doc.text(renglon, MARGEN + 16, yBloque);
+    yBloque += 14;
+  }
+  y += altoBloque + 24;
 
   // ---------- Tabla de productos ----------
   const xNombre = MARGEN;
   const xCantidad = ancho - MARGEN - 170;
   const xPrecio = ancho - MARGEN - 90;
   const xSubtotal = ancho - MARGEN;
+  const anchoNombre = xCantidad - xNombre - 30;
 
-  function encabezadoTabla(yTabla: number): number {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(...TINTA_SUAVE);
-    doc.text("PRODUCTO", xNombre, yTabla);
-    doc.text("CANT.", xCantidad, yTabla, { align: "right" });
-    doc.text("P. UNIT.", xPrecio, yTabla, { align: "right" });
-    doc.text("SUBTOTAL", xSubtotal, yTabla, { align: "right" });
-    const yLinea = yTabla + 6;
+  function encabezadoTabla() {
+    letra("bold", 9, TINTA_SUAVE);
+    doc.text("PRODUCTO", xNombre, y);
+    doc.text("CANT.", xCantidad, y, { align: "right" });
+    doc.text("P. UNIT.", xPrecio, y, { align: "right" });
+    doc.text("SUBTOTAL", xSubtotal, y, { align: "right" });
     doc.setDrawColor(...LINEA);
-    doc.line(MARGEN, yLinea, ancho - MARGEN, yLinea);
-    return yLinea + 18;
+    doc.line(MARGEN, y + 6, ancho - MARGEN, y + 6);
+    y += 24;
   }
 
-  y = encabezadoTabla(y);
+  encabezadoTabla();
 
   for (const linea of datos.lineas) {
-    const espacio = asegurarEspacio(doc, y, 34);
-    y = espacio.y;
-    if (espacio.saltoDePagina) y = encabezadoTabla(y);
+    const referencia = linea.referencia ? `Ref. ${t(linea.referencia)}` : null;
+    letra("normal", 10);
+    const renglones: string[] = doc.splitTextToSize(t(linea.nombre), anchoNombre);
+    const tono = linea.tono ? t(linea.tono) : null;
+    const alto = (referencia ? 13 : 0) + renglones.length * 13 + (tono ? 13 : 0) + 4;
+    if (asegurar(alto + 4)) encabezadoTabla();
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(...TINTA_SUAVE);
-    doc.text(`Ref. ${linea.referencia}`, xNombre, y);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...TINTA);
-    doc.text(linea.nombre, xNombre, y + 13, { maxWidth: xCantidad - xNombre - 16 });
-
-    // La etiqueta (tono, color, diseño) no viaja con la línea: va solo el nombre de la variante.
-    if (linea.tono) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.text(linea.tono, xNombre, y + 26);
-    }
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
+    // Las cifras van en el primer renglón de la fila, con o sin «Ref.».
+    letra("normal", 10);
     doc.text(String(linea.cantidad), xCantidad, y, { align: "right" });
     doc.text(pesos(linea.precioUnitario), xPrecio, y, { align: "right" });
-
-    doc.setFont("helvetica", "bold");
+    letra("bold", 10);
     doc.text(pesos(linea.subtotal), xSubtotal, y, { align: "right" });
 
-    y += linea.tono ? 36 : 30;
+    let yFila = y;
+    if (referencia) {
+      letra("bold", 9, TINTA_SUAVE);
+      doc.text(referencia, xNombre, yFila);
+      yFila += 13;
+    }
+    letra("normal", 10);
+    for (const renglon of renglones) {
+      doc.text(renglon, xNombre, yFila);
+      yFila += 13;
+    }
+    if (tono) {
+      letra("bold", 9);
+      doc.text(tono, xNombre, yFila);
+    }
+    y += alto + 10;
   }
 
-  y += 6;
   doc.setDrawColor(...LINEA);
-  doc.line(MARGEN, y, ancho - MARGEN, y);
-  y += 22;
+  doc.line(MARGEN, y - 4, ancho - MARGEN, y - 4);
+  y += 18;
 
   // ---------- Totales ----------
-  y = asegurarEspacio(doc, y, 110).y;
-
-  function filaTotal(etiqueta: string, valor: string, destacado = false) {
-    doc.setFont("helvetica", destacado ? "bold" : "normal");
-    doc.setFontSize(destacado ? 14 : 10);
-    doc.setTextColor(...(destacado ? TINTA : TINTA_SUAVE));
-    doc.text(etiqueta, xPrecio, y, { align: "right" });
-    doc.text(valor, xSubtotal, y, { align: "right" });
-    y += destacado ? 22 : 16;
+  const filas = filasDelTotal(datos);
+  asegurar(filas.length * 18 + 10);
+  for (const fila of filas) {
+    const total = fila.tipo === "total";
+    letra(total ? "bold" : "normal", total ? 14 : 10, total ? TINTA : fila.tipo === "ahorro" ? AHORRO : TINTA_SUAVE);
+    doc.text(fila.etiqueta, xPrecio, y, { align: "right" });
+    doc.text(fila.valor, xSubtotal, y, { align: "right" });
+    y += total ? 22 : 16;
   }
-
-  if (datos.porMayor || datos.descuento > 0) {
-    filaTotal("Subtotal", pesos(datos.subtotal));
-    if (datos.porMayor) filaTotal("Precio por mayor", "aplicado");
-    if (datos.descuento > 0) {
-      const etiqueta = datos.porcentaje > 0 ? `Descuento ${datos.porcentaje} %` : "Descuento";
-      filaTotal(etiqueta, `-${pesos(datos.descuento)}`);
-    }
-  }
-  filaTotal("Total", pesos(datos.total), true);
 
   // ---------- Datos de pago ----------
-  if (datos.pagoNumero) {
+  const pago = datosDePago(datos);
+  if (pago) {
     y += 10;
-    y = asegurarEspacio(doc, y, 70).y;
+    asegurar(70);
     doc.setFillColor(...SUPERFICIE);
-    doc.roundedRect(MARGEN, y, ancho - MARGEN * 2, 56, 8, 8, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...TINTA);
+    doc.roundedRect(MARGEN, y, util, 56, 8, 8, "F");
+    letra("bold", 10);
     doc.text("Para completar tu pago", MARGEN + 16, y + 20);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    doc.text(
-      `${datos.pagoMetodo ?? ""}  ${datos.pagoNumero}`.trim(),
-      MARGEN + 16,
-      y + 38
-    );
-    if (datos.pagoTitular) {
-      doc.setFontSize(9);
-      doc.setTextColor(...TINTA_SUAVE);
-      doc.text(`a nombre de ${datos.pagoTitular}`, MARGEN + 16, y + 50);
+    letra("normal", 12);
+    doc.text(t(pago.cuenta), MARGEN + 16, y + 38);
+    if (pago.titular) {
+      letra("normal", 9, TINTA_SUAVE);
+      doc.text(t(pago.titular), MARGEN + 16, y + 50);
     }
     y += 70;
   }
 
-  // ---------- Agradecimiento ----------
-  // Helvetica de jsPDF solo trae WinAnsi: nada de emoji ni símbolos fuera de Latin-1.
+  // ---------- Nota al pie o agradecimiento ----------
+  // Helvetica de jsPDF solo trae WinAnsi: los textos de la administradora pasan por textoImprimible.
+  // La nota (400 caracteres como máximo) cabe en una hoja: va entera con su línea, sin renglones sueltos.
+  const cierre = cierreDe(t(datos.nota));
+  letra("normal", 10);
+  const renglones = cierre.tipo === "nota" ? cierre.parrafos.flatMap((p) => doc.splitTextToSize(p, util) as string[]) : [];
   y += 16;
-  y = asegurarEspacio(doc, y, 50).y;
+  asegurar(Math.max(50, 22 + renglones.length * 14));
   doc.setDrawColor(...LINEA);
   doc.line(MARGEN, y, ancho - MARGEN, y);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...TINTA);
-  doc.text("Gracias por comprar en Anaya Beauty.", ancho / 2, y + 22, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.setTextColor(...TINTA_SUAVE);
-  doc.text("Si tienes alguna pregunta sobre tu pedido, escríbenos por WhatsApp.", ancho / 2, y + 38, {
-    align: "center",
-  });
+  y += 22;
+  if (cierre.tipo === "nota") {
+    letra("normal", 10);
+    for (const renglon of renglones) {
+      doc.text(renglon, MARGEN, y);
+      y += 14;
+    }
+  } else {
+    letra("bold", 11);
+    doc.text(cierre.titulo, ancho / 2, y, { align: "center" });
+    letra("normal", 9.5, TINTA_SUAVE);
+    doc.text(cierre.detalle, ancho / 2, y + 16, { align: "center" });
+  }
 
   // ---------- Pie de página en todas las hojas ----------
   const totalPaginas = doc.getNumberOfPages();
   for (let pagina = 1; pagina <= totalPaginas; pagina++) {
     doc.setPage(pagina);
-    const altoPagina = doc.internal.pageSize.getHeight();
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...TINTA_SUAVE);
-    doc.text(
-      "Anaya Beauty · Belleza que te define",
-      ancho / 2,
-      altoPagina - 20,
-      { align: "center" }
-    );
-    if (totalPaginas > 1) {
-      doc.text(`${pagina}/${totalPaginas}`, ancho - MARGEN, altoPagina - 20, {
-        align: "right",
-      });
-    }
+    letra("normal", 8, TINTA_SUAVE);
+    doc.text("Anaya Beauty · Belleza que te define", ancho / 2, altoPagina - 20, { align: "center" });
+    if (totalPaginas > 1) doc.text(`${pagina}/${totalPaginas}`, ancho - MARGEN, altoPagina - 20, { align: "right" });
   }
 
   return doc;
 }
 
+/** El PDF como archivo, con el nombre del documento: sirve para descargarlo o compartirlo. */
+export async function generarArchivoRecibo(datos: DatosRecibo): Promise<File> {
+  const doc = await generarReciboPDF(datos);
+  return new File([doc.output("blob")], nombreArchivo(datos.titulo, datos.numero), { type: "application/pdf" });
+}
+
 export async function descargarReciboPDF(datos: DatosRecibo): Promise<void> {
   const doc = await generarReciboPDF(datos);
-  doc.save(`recibo-${datos.numero}.pdf`);
+  doc.save(nombreArchivo(datos.titulo, datos.numero));
 }
