@@ -15,7 +15,7 @@
  * juntaron en una sola pantalla) y ya no hay código de acceso.
  */
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { encodeReply } from "next/dist/compiled/react-server-dom-turbopack/client.edge.js";
 
 const SITIO = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -33,9 +33,12 @@ const check = (ok, msg, detalle = "") => {
 };
 
 // El id del server action lo publica Next en su manifiesto de build.
-// `/carrito` tiene varios actions (cargar la bolsa y confirmarla), así
-// que hay que probarlos: el manifiesto no dice cuál es cuál.
-const RUTA_MANIFIESTO = ".next/dev/server/app/carrito/page/server-reference-manifest.json";
+// Desde la v5 /carrito vive en el grupo (tienda); la ruta vieja queda por si se corre sobre la v4.
+const RUTAS_MANIFIESTO = [
+  ".next/dev/server/app/(tienda)/carrito/page/server-reference-manifest.json",
+  ".next/dev/server/app/carrito/page/server-reference-manifest.json",
+];
+const RUTA_MANIFIESTO = RUTAS_MANIFIESTO.find((ruta) => existsSync(ruta)) ?? RUTAS_MANIFIESTO[0];
 
 let manifiesto;
 try {

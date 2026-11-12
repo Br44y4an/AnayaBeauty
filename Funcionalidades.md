@@ -1,50 +1,89 @@
 # Funcionalidades — Anaya Beauty (Catálogo digital)
 
-> Documento generado escaneando todo el proyecto (actualizado 2026-09-10) para no
+> Documento escrito escaneando el proyecto (actualizado 2026-11-11, v5) para no
 > tener que volver a leer todo el código en cada conversación. Si el código cambia,
 > actualiza este archivo en las secciones afectadas en vez de regenerarlo entero.
 >
-> **La v4 cambió el flujo de compra**: desapareció el código de 4 dígitos y la
-> bolsa y la confirmación se juntaron en una sola pantalla. Antes de desplegar
-> hay que ejecutar `supabase/migracion-v4.sql`.
+> **La v5 rediseñó la tienda y el panel.** Ya está en producción
+> (https://anaya-beauty-tau.vercel.app) y la base tiene aplicados
+> `migracion-v5.sql` y `migracion-v5-departamentos.sql`. Si montas otro entorno,
+> el orden es: SQL primero, web después, departamentos al final (ver sección 5).
 
 ## Qué es
 
 Catálogo de maquillaje pensado para vender en transmisiones en vivo de TikTok.
-Las clientas entran por un QR, arman su pedido con precios que bajan según la
-cantidad, y lo confirman en el momento. No hay pasarela de pago automática: el
-cobro se coordina después por WhatsApp (Nequi/Daviplata) y se verifica a mano.
-
-**El código de 4 dígitos se eliminó en la v4.** Era un paso extra entre "ya
-elegí" y "ya pedí": había que salir a WhatsApp, esperar la respuesta de la
-administradora y volver. Tampoco era la protección que parecía — el `insert` en
-`code_attempts` iba seguido de `raise exception`, y la excepción revertía la
-transacción entera incluido ese insert, así que el límite por fuerza bruta
-nunca llegó a contar ni un intento. En su lugar hay dos defensas que viven en
-filas que sí se confirman: un límite de pedidos por dispositivo
-(`orders.ip_hash`) y una clave de idempotencia que convierte el doble toque o
-el reintento por mala señal en una operación segura.
+Las clientas entran por un QR o un enlace de WhatsApp, arman su pedido con
+precios que bajan según la cantidad, y lo confirman en el momento. No hay
+pasarela de pago automática: el cobro se coordina después por WhatsApp
+(Nequi/Daviplata/llave) y se verifica a mano.
 
 **Stack:** Next.js 16 (App Router) · TypeScript · React 19 · Tailwind 4 ·
 Supabase (Postgres, Auth, Storage, Realtime) · Resend (correo) · Zustand
 (carrito) · qrcode · jsPDF (recibos en PDF, 100% en el navegador) · Vitest.
-Todo en capa gratuita.
+Todo en capa gratuita. Fuente: Figtree (`next/font/google`).
 
 **Idioma del código:** nombres de funciones, variables, tipos y comentarios en
-español. UI en español (es-CO).
+español (los hooks conservan el prefijo `use`). UI en español (es-CO), sin
+emoji.
 
-## Las dos reglas que sostienen el sistema
+## Qué cambió en la v5
+
+Las clientas decían que elegir un producto y pedir era complicado. El flujo no
+era largo; fallaban la orientación y el ruido. La v5 cambia esto:
+
+- **Cabecera fija** de 56 px con logo, búsqueda, WhatsApp y bolsa con contador.
+  Desaparecen el banner (que pedía un código que ya no existe), el
+  `BotonFlotante` «Ver mi pedido» y el `Encabezado` con banner.
+- **7 departamentos** (pestañas fijas) en vez de 26 categorías planas, con
+  subcategorías en una segunda fila.
+- **Búsqueda que entiende** «usk621», «pestanas», «rimel», «brocha polvo»
+  (función SQL `buscar_productos`), con sugerencias mientras se escribe.
+- **Toda la tarjeta abre el producto** en una vista rápida con URL propia
+  (ruta interceptada). Se va `HojaCompra` y con ella `cargarTonos` y
+  `cargarMasProductos`: el tono se elige dentro de la ficha.
+- **Varios tonos de una vez**: una fila por variante con su propio −/cantidad/+
+  y un solo botón «Agregar N · $X». Nunca se agrupa por familia de color.
+- **Bolsa agrupada por producto**, con «Deshacer», progreso al siguiente
+  beneficio, formulario de 3 campos que se puede recordar y total honesto
+  («Total productos» + texto de envío).
+- **Pedido confirmado** abre con los datos de pago y un botón de WhatsApp con
+  el mensaje completo; el pedido queda guardado en el celular («Mis pedidos»).
+- **Sistema visual sobrio**: blanco, tinta casi negra y un solo acento fucsia.
+- **Seguridad**: tabla `administradores` + `es_admin()` en todas las políticas
+  de escritura, en el proxy y en las acciones del panel. Realtime de pedidos
+  funcionando.
+- **Código**: una sola lógica de compra (`compra.ts`), lecturas por GET con
+  caché y etiquetas, `VistaCarrito` partido en `components/bolsa/`.
+- **Panel**: pedidos en vivo con el siguiente paso como botón, productos con
+  filtros y variantes por id, categorías editables, importación más segura y
+  **recibos personalizables** (sección 7).
+- **Importador Engol**: solo agrega referencias nuevas, en borrador. No toca
+  las que ya existen.
+- **Legal mínimo**: `/privacidad`, aviso junto a «Confirmar» y versión de la
+  política aceptada guardada en cada pedido.
+
+## Las reglas que sostienen el sistema
 
 1. **El precio nunca lo decide el navegador.** El carrito del cliente solo
-   guarda pares producto+tono+cantidad. El total real se recalcula en
+   guarda pares producto+variante+cantidad. El total real se recalcula en
    PostgreSQL (función `crear_pedido`) leyendo los escalones de precio desde
    la base. Un carrito manipulado no puede cambiar lo que se cobra (verificado
    en `scripts/probar-flujo.mjs` y `scripts/probar-descuentos.mjs`).
-2. **Confirmar un pedido es una operación atómica.** Validar el código,
-   verificar stock, calcular precios, descontar inventario, guardar el pedido
-   y quemar el código ocurren todos dentro de una sola función SQL
-   (`security definer`, con `for update` para bloqueo de filas). Si falla el
-   stock, nada se mueve.
+2. **Confirmar un pedido es una operación atómica.** Verificar stock, calcular
+   precios, descontar inventario y guardar el pedido ocurren dentro de una sola
+   función SQL (`security definer`, con `for update`). Si falla el stock, nada
+   se mueve.
+3. **Un pedido enviado dos veces sigue siendo un pedido.** La clave de
+   idempotencia convierte el doble toque o el reintento por mala señal en una
+   operación segura; el límite por dispositivo (`orders.ip_hash`) frena abusos.
+4. **Lo que la bolsa muestra es lo que se envía.** Una sola función
+   (`reconciliarCarrito`) decide qué se puede pedir.
+5. **Tener sesión no basta para administrar.** Solo las cuentas de
+   `administradores` leen pedidos y escriben.
+
+El código de 4 dígitos se eliminó en la v4: su límite por fuerza bruta nunca
+contó un intento (la excepción revertía el `insert` en `code_attempts`). La v5
+no lo reintroduce ni cobra nada antes de abrir la bolsa.
 
 ---
 
@@ -57,13 +96,13 @@ Función pura, sin imports, para poder ejecutarse en cualquier contexto
 - `Escalon = { minCantidad, precioUnitario }`
 - `precioUnitarioPara(escalones, cantidad)`: toma el escalón más alto cuyo
   mínimo no supera la cantidad pedida.
-  - **La `cantidad` que se le pasa es la del PRODUCTO COMPLETO, sumando todos
-    sus tonos** — no la de una línea suelta. Quién hace esa suma es
-    `discounts.ts` (ver sección 2); `pricing.ts` solo recibe el número.
+  - **La `cantidad` es la del PRODUCTO COMPLETO, sumando todas sus
+    variantes**, no la de una línea suelta. Quién hace esa suma es
+    `discounts.ts` (sección 2); `pricing.ts` solo recibe el número.
 - `subtotalPara`: precio unitario × cantidad.
-- `precioDesde`: el precio unitario más bajo configurado (para "desde $X").
-- `sugerenciaUpsell(escalones, cantidad)`: calcula cuánto falta para el
-  siguiente escalón y cuánto se ahorraría ("suma 2 más y te salen a $8.000").
+- `precioDesde`: el precio unitario más bajo configurado.
+- `sugerenciaUpsell(escalones, cantidad)`: cuánto falta para el siguiente
+  escalón y cuánto se ahorraría.
 
 ## 2. Motor de descuentos (`src/lib/discounts.ts`)
 
@@ -71,674 +110,719 @@ Debe coincidir "al peso" con `crear_pedido` en PostgreSQL (verificado por
 `scripts/probar-descuentos.mjs`).
 
 **Agrupación por producto (v3):** el escalón de una línea NO lo decide su
-propia cantidad, sino la suma de todas las líneas de ese producto. Los tonos
-de un mismo labial comparten inventario y también comparten escalón: Rojo x2 +
-Nude x1 = 3 unidades, y las tres se cobran al precio del escalón de 3. Antes
-cada tono elegía escalón por separado y un combo repartido entre tonos nunca
-se alcanzaba. Productos distintos NO suman entre sí.
+propia cantidad, sino la suma de todas las líneas de ese producto. Las
+variantes de un mismo labial comparten inventario y escalón: Rojo x2 + Nude x1
+= 3 unidades, y las tres se cobran al precio del escalón de 3. Productos
+distintos NO suman entre sí.
 
 Sobre eso van dos beneficios encadenados:
 
-1. **Precio por mayor**: si el subtotal normal (con escalones normales)
-   alcanza un umbral configurable (`store_settings.umbral_por_mayor`, default
-   $200.000), TODOS los productos del carrito pasan a su precio unitario más
-   bajo, sin importar cuántas unidades lleve de cada uno individualmente.
-   - La decisión de activarlo se toma sobre el subtotal SIN rebajar, y una vez
-     activado no se revierte (evita oscilación infinita).
+1. **Precio por mayor**: si el subtotal normal alcanza un umbral configurable
+   (`store_settings.umbral_por_mayor`, default $200.000), TODOS los productos
+   pasan a su precio unitario más bajo. La decisión se toma sobre el subtotal
+   SIN rebajar y, una vez activada, no se revierte.
 2. **Descuento por porcentaje**: reglas tipo "desde $50.000 → 5%"
-   (`discount_rules`, montoMinimo+porcentaje). Se aplica la regla activa de
-   mayor monto que el carrito alcanza, sobre el subtotal YA ajustado por el
-   precio por mayor.
+   (`discount_rules`). Se aplica la regla activa de mayor monto que el carrito
+   alcanza, sobre el subtotal YA ajustado por el precio por mayor.
 
 Orden de cálculo: `subtotalNormal` → (¿≥umbral? → precio más bajo por
 producto) → `subtotalBase` → aplicar % → `total`.
 
-- `LineaCalculo = { productoId, escalones, cantidad }` — el `productoId` es lo
-  que permite agrupar los tonos.
-- `calcularTotales(lineas, reglas, umbralPorMayor)` → `Totales` con
-  subtotalNormal, subtotalBase, porMayor, porcentaje, descuento, total,
-  ahorroTotal.
-- `cantidadesPorProducto(lineas)` → `Map<productoId, unidades>`: la suma que
-  decide el escalón.
-- `unitarioDeLinea(linea, lineas, porMayor)`: precio unitario final de una
-  línea. **Es la función que debe usar la interfaz para pintar precios**, para
-  no reimplementar la regla en cada pantalla.
-- `porcentajeAplicable(subtotal, reglas)`.
-- `siguienteBeneficio(...)`: calcula cuánto le falta al carrito para el
-  próximo beneficio ("te faltan $12.000 para el 10%"), usado como empujón de
-  ventas (upsell) en el carrito.
+- `LineaCalculo = { productoId, escalones, cantidad }`.
+- `calcularTotales(lineas, reglas, umbralPorMayor)` → `Totales` (subtotalNormal,
+  subtotalBase, porMayor, porcentaje, descuento, total, ahorroTotal).
+- `cantidadesPorProducto(lineas)`, `unitarioDeLinea(linea, lineas, porMayor)`
+  (la que debe usar la interfaz para pintar precios), `porcentajeAplicable`,
+  `siguienteBeneficio(...)` (alimenta «Te faltan $12.000 para el 5 % de
+  descuento»).
 
 Ejemplo verificado: carrito de $200.000 exactos → precio por mayor baja a
 $196.000 → 5% de descuento → total $186.200.
 
+## 2 bis. Compra de un producto (`src/lib/compra.ts`)
+
+`resumenDeCompra({ escalones, stock, unidadesEnBolsa, unidadesNuevas })` es la
+única cuenta de compra de la tienda. Las variantes de un producto comparten
+escalón: lo nuevo se cobra al precio que alcanza junto con lo que ya está en la
+bolsa. Devuelve unidades, `precioUnitario`, `subtotalNuevas`, `escalonActivo`,
+`siguiente` (cuánto falta y a qué precio), `maxNuevas` (stock menos lo que ya
+hay en la bolsa) y `bloqueo` (`sin-precio`, `agotado`, `sin-seleccion`,
+`supera-stock`). Sin nada elegido muestra el precio de 1 unidad, no $0.
+
+Lo usan `PanelCompra` (vía `useCompraProducto`) y `AgregarRapido` (la zona de
+compra de la tarjeta usa `useCarrito` y `resumenDeCompra` directamente, sin el
+hook).
+
 ## 3. Carrito (`src/lib/cart.ts`)
 
 Store de Zustand con persistencia en `localStorage` (`persist` +
-`createJSONStorage`, key `anaya-carrito`, `version: 3`). La migración de v2 a v3
-**conserva las líneas**: el formato no cambió y tirar la bolsa de alguien que
-llevaba media hora armándola sería peor que cualquier incompatibilidad.
+`createJSONStorage`, key `anaya-carrito`, `version: 3`). La migración de v2 a
+v3 **conserva las líneas**.
 
-- Nunca guarda precios, solo `{ productoId, tonoId, tonoNombre, cantidad }`.
-- Identidad de una línea = producto + tono (dos tonos del mismo labial = dos
-  líneas independientes; mismo tono suma cantidades).
-- Acciones: `agregar`, `establecer` (cantidad absoluta, elimina la línea si
-  queda en 0), `quitar`, `vaciar`, `prepararEnvio`.
+- Nunca guarda precios, solo `{ productoId, tonoId, tonoNombre, cantidad }`
+  (los nombres persistidos no cambiaron para no migrar el `localStorage`).
+- Identidad de una línea = producto + variante.
+- Acciones: `agregar`, `establecer` (elimina la línea si queda en 0),
+  `quitar`, `restaurar(linea, indice)` (el «Deshacer»; no duplica si la clienta
+  ya la volvió a agregar), `vaciar`, `prepararEnvio`.
 - `claveEnvio` + `prepararEnvio()`: identificador del intento de compra en
-  curso. Viaja hasta `crear_pedido`, que lo guarda en `orders`. Si el mismo
-  envío llega dos veces (doble toque, reintento del navegador), el servidor
-  reconoce la clave y devuelve el pedido que ya creó en vez de duplicarlo y
-  descontar el stock otra vez. **Se anula en cuanto la bolsa cambia**: otro
-  contenido es otro pedido.
-- Helpers: `totalUnidades`, `unidadesDeProducto`, `lineasDeProducto`.
-
-### Suscripciones finas (el arreglo de "se traba")
-
-`usarLineasDeProducto(id)`, `usarUnidadesDeProducto(id)` y `usarTotalUnidades()`.
-
-El catálogo llegó a pintar 591 tarjetas a la vez y cada una hacía
-`usarCarrito((e) => e.lineas)`: **cualquier toque en un "+" volvía a renderizar
-las 591**, con sus imágenes, sus paletas y sus cálculos de precio. Ése era el
-origen de la traba — no la red ni la base: el propio navegador.
-
-`usarLineasDeProducto` usa `useShallow`, y como `agregar`/`establecer`
-conservan la identidad de las líneas que no tocan, la tarjeta de un producto no
-se entera de lo que pasa en otro. `TarjetaProducto` va además envuelta en
-`memo`. Hay una prueba que fija esa garantía de identidad (`cart.test.ts`).
+  curso, que viaja hasta `crear_pedido`. **Se anula en cuanto la bolsa cambia.**
+- Hooks con la convención de React: `useCarrito`, `useLineasDeProducto`,
+  `useUnidadesDeProducto`, `useTotalUnidades` (suscripciones finas con
+  `useShallow`: tocar un «+» no vuelve a pintar las demás tarjetas; hay una
+  prueba que fija la identidad de las líneas).
+- `escucharOtrasPestanas()` (montada por `SincronizarBolsa`): el `persist` no
+  escucha otras pestañas, así que se rehidrata con el evento `storage`. Sin eso,
+  la pestaña abierta desde WhatsApp pisaría la bolsa de la otra.
 
 ## 3 bis. Reconciliación del carrito (`src/lib/carrito/reconciliar.ts`)
 
-Módulo puro que contrasta la bolsa guardada con lo que de verdad hay en la
-tienda ahora. **Una sola respuesta a "qué se puede pedir", y las dos pantallas
-la usan.**
-
-Antes cada pantalla resolvía eso por su cuenta: `VistaCarrito` descartaba en
-silencio las líneas sin stock y pintaba un total que solo contaba las que
-sobrevivían, mientras que el formulario de confirmación serializaba las líneas
-CRUDAS del store, descartadas incluidas. Resultado: la bolsa mostraba $80.000,
-la clienta pulsaba "Confirmar" y el servidor respondía `SIN_STOCK` por un
-producto que ella ya no veía en pantalla — la venta se caía en el último paso.
+Módulo puro que contrasta la bolsa guardada con lo que hay en la tienda ahora.
 
 - `reconciliarCarrito(lineas, disponibilidad)` → `{ lineas, pedibles,
-  conProblema, hayCambios }`. Cada línea queda en `ok` / `ajustada` /
-  `agotada` / `no-disponible`.
-- El stock compartido entre tonos se reparte en el orden en que se agregaron,
-  igual que valida `crear_pedido`: un carrito que sale entero de aquí no puede
-  fallar allá.
-- `explicarLinea(...)` da el mensaje sin jerga ("se agotó" y "ya no está" son
-  cosas distintas y la clienta merece saber cuál le pasó).
+  conProblema, hayCambios }`; cada línea queda `ok` / `ajustada` / `agotada` /
+  `no-disponible`. Las variantes se reconcilian por id y, si no existe, por
+  nombre.
+- El stock compartido entre variantes se reparte en el orden en que se
+  agregaron, igual que valida `crear_pedido`.
+- `explicarLinea(...)` da el mensaje sin jerga («Solo quedan 2: ajustamos la
+  cantidad», «Este tono se agotó», «Este producto ya no está disponible»).
 - `itemsParaPedido(carrito)` es lo único que se envía al servidor.
+- `carrito/mensajes.ts`: `mensajeAmable` traduce los códigos de la base y
+  señala QUÉ campo corregir.
 
-## 4. Tonos de color
+## 4. Variantes (tonos, colores, diseños…)
 
-Productos como labiales/sombras pueden tener `product_shades` (tabla v2):
-`{ nombre, colorHex, orden }`. Si un producto tiene tonos configurados, la
-clienta **debe** elegir uno antes de poder agregarlo al carrito.
+Productos como labiales, sombras o cosmetiqueras tienen `product_shades`:
+`{ nombre, colorHex, orden, agotado }`. Si un producto tiene variantes, la
+clienta **debe** elegir al menos una para agregarlo.
 
-### El rediseño de la v4 (la queja más repetida)
-
-*"Los tonos son muchísimos"* y *"estoy obligada a ver los tonos de productos
-que no quiero"*. Había productos con 30 y 40 tonos, y sus círculos se pintaban
-todos, siempre, dentro de cada tarjeta del catálogo. La respuesta tiene tres
-partes:
-
-1. **Los tonos salen de la grilla.** La tarjeta solo sabe `num_tonos` (una
-   columna, mantenida por disparador) y ofrece un botón "Elegir tono". Además
-   de quitar el muro visual, esto saca decenas de miles de filas de la consulta
-   del catálogo.
-2. **La paleta vive en una hoja inferior** (`HojaCompra` sobre `ui/Hoja.tsx`),
-   que se abre solo si la clienta la pide. Los tonos se piden en ese momento
-   (`cargarTonos`). La hoja aparece encima del catálogo y se va: nunca se
-   pierde el sitio ni el scroll, que es carísimo en mitad de un live.
-3. **Dentro de la hoja la paleta se puede recorrer**: cada tono es un botón de
-   44px **con su nombre debajo** (antes eran círculos de 28px sin texto); por
-   encima de 10 tonos se agrupan por familia de color (Rojos, Nudes, Rosados…)
-   y por encima de 12 aparece un buscador que tolera tildes. Nadie recuerda un
-   código hexadecimal, pero sí que "era un rojo".
-
-La lógica de agrupado y filtrado es pura y está en `src/lib/tonos.ts`
-(`familiaDeColor`, `agruparTonos`, `filtrarTonos`, `necesitaBorde`), con
-pruebas propias. `familiaDeColor` trata los **nudes** como caso especial —son
-naranjas/marrones poco saturados—: sin esa regla un beige apagado caía junto a
-un naranja neón y la paleta no se podía leer.
-
-- El color nunca es el único indicador: siempre hay nombre en texto, y la marca
-  de "elegido" es una palomita además del anillo.
-- `necesitaBorde` pone contorno a los tonos casi blancos, que si no desaparecen
-  sobre el fondo blanco y la clienta ve un hueco donde hay una opción.
-- El stock es del producto completo, no por tono — se reparte entre líneas.
-- **El escalón de precio también es del producto completo**: las unidades de
-  todos los tonos suman para decidirlo (ver sección 2).
-- El tono viaja congelado (`tono_snapshot`) hasta `order_items`, el correo y
-  el panel admin.
+- **Etiqueta por producto** (`src/lib/variantes.ts`): Tono, Color, Diseño,
+  Modelo, Aroma, Largo o Paleta. Se resuelve así: la del producto → la de su
+  categoría → la de su departamento → por defecto (Rostro, Ojos y cejas y
+  Labios dicen «Tono»; el resto, «Color»). `pluralVariante(etiqueta, n)` da «1
+  tono», «6 tonos», «4 colores», «4 paletas»…
+- **La grilla no trae las variantes**: solo `num_tonos` (columna mantenida por
+  disparador). La tarjeta dice «Elegir tono · 6» y abre la ficha.
+- **`SelectorVariantes`**: una fila por variante (≥ 56 px) en el orden
+  guardado, que es el de la foto, con stepper de 44 px. Nunca se agrupa por
+  familia de color (agrupar desordenaba 24 de 26 productos de 10+ tonos). Con
+  más de 12 variantes aparece «Buscar entre N tonos» (filtra conservando el
+  orden). Las agotadas salen atenuadas, con «Agotado» y sin stepper. Si los
+  nombres son del tipo «Tono N», avisa que «la numeración corresponde a la
+  foto».
+- **La foto es la leyenda**: va completa y se amplía con un toque
+  (`VisorImagen`).
+- **Círculo de color solo si las muestras son confiables**
+  (`muestrasConfiables`): se descarta si algún hex falta o es inválido, si es
+  el valor por defecto del formulario (#E5308A) o si dos colores se parecen
+  demasiado (ΔE76 < 10 en Lab). Si falla, no se pinta ningún círculo de ese
+  producto. La tarjeta nunca pinta muestras.
+- `esNumeracionDeFoto(variantes)`: todos los nombres son «Tono N».
+- **Agotado por variante** (`product_shades.agotado`): bandera, no stock. La
+  dueña ya no borra tonos para marcarlos agotados (borrar renumera la foto).
+  `confirmarPedido` rechaza una variante agotada o inexistente
+  (`TONO_NO_DISPONIBLE`).
+- `src/lib/tonos.ts` conserva `hexAHsl`, `necesitaBorde` y `filtrarTonos`.
+- El stock y el escalón son del producto completo: las unidades de todas las
+  variantes suman. La variante viaja congelada (`tono_snapshot`) hasta
+  `order_items`, el correo y el panel.
 
 ## 5. Base de datos — Supabase (`supabase/*.sql`)
 
 Ejecutar en orden: `schema.sql` → `policies.sql` → `functions.sql` →
-`migracion-v2.sql` (tonos/descuentos) → `migracion-v3.sql` (escalón agrupado
-por producto) → **`migracion-v4.sql`** (pedido sin código + columnas
-calculadas) → `tests-v4.sql` (12 comprobaciones). Todos idempotentes.
+`migracion-v2.sql` → `migracion-v3.sql` → `migracion-v4.sql` → `tests-v4.sql`
+(12 comprobaciones) → **`migracion-v5.sql`** → `tests-v5.sql` (11
+comprobaciones) → publicar la web v5 → **`migracion-v5-departamentos.sql`**.
+Todos son idempotentes y los tests terminan en `rollback`. `tests-v4.sql` sí
+gasta números de pedido; `tests-v5.sql` no. `tests.sql` está obsoleto.
 
-> `tests.sql` quedó obsoleto: probaba el flujo con código de acceso.
+La migración v5 es compatible hacia atrás (la web v4 sigue funcionando). Los
+departamentos van después porque la web vieja los mostraría vacíos.
+`revertir-v5.sql` deja las categorías planas y borra los 7 departamentos; las
+columnas, funciones y políticas de la v5 se quedan.
 
 **Antes de desplegar**, `node --env-file=.env.local scripts/verificar-migracion.mjs`
-dice si a la base le falta algo. La v4 cambia la firma de `crear_pedido` y añade
-columnas que el catálogo consulta directamente: si se despliega la web antes de
-correr el SQL, el catálogo responde 500 y nadie puede pedir.
+dice si a la base le falta algo (no escribe nada). Si la web sale antes que el
+SQL, el catálogo responde 500.
+
+Estado de producción: v5 aplicada; 26 categorías y 370 productos tras
+`migracion-v5-departamentos.sql`.
 
 ### Tablas principales
-- `categories` (con `categoria_padre_id` para subcategorías)
-- `products` (`referencia` único, `stock`, `activo`, nunca se borra —
-  histórico de pedidos referencia el id; desde v4 `precio_desde`, `precio_base`
-  y `num_tonos`, mantenidas por disparador para poder paginar y ordenar en SQL)
+- `categories` (con `categoria_padre_id`, máximo dos niveles; v5: `etiqueta_variante`)
+- `products` (`referencia` único, `stock`, `activo`, nunca se borra; v4:
+  `precio_desde`, `precio_base`, `num_tonos` mantenidas por disparador; v5:
+  `destacado`, `etiqueta_variante`)
 - `price_tiers` (escalones min_cantidad/precio_unitario por producto)
-- `product_shades` (tonos, v2)
-- `access_codes` y `code_attempts` — **en desuso desde la v4**. No se borran
-  porque los pedidos viejos las referencian y el historial debe quedar intacto,
-  pero ya nada escribe en ellas.
-- `orders` (numeración `AB-0001` autoincremental vía secuencia,
-  `stock_devuelto` como bandera de idempotencia para cancelaciones,
-  subtotal/descuento/porcentaje_descuento/por_mayor desde v2, y desde v4:
-  `ip_hash` (límite por dispositivo), `clave_idempotencia` (única, parcial:
-  convierte el reenvío en algo seguro) y `notas_cliente`)
-- `order_items` (snapshot de referencia/nombre/tono/precio al momento de compra)
-- `store_settings` (config clave/valor, columna `publico` filtra lo que ve la
-  web pública)
-- `discount_rules` (monto_minimo/porcentaje, v2)
-- `code_attempts` (hash con sal de IP, para rate-limit; nunca se guarda IP en claro)
+- `product_shades` (variantes; v5: `agotado`)
+- `orders` (numeración `AB-0001`, `stock_devuelto`, desglose de descuento,
+  `ip_hash`, `clave_idempotencia` única parcial, `notas_cliente`; v5:
+  `politica_version` y `politica_aceptada_en`)
+- `order_items` (snapshot de referencia/nombre/variante/precio al comprar)
+- `store_settings` (clave/valor; `publico` filtra lo que ve la web). Claves
+  que escribe el panel: `mensaje_exito`, `umbral_por_mayor`, `pago_metodo`,
+  `pago_numero`, `pago_titular`, `whatsapp_negocio`, `envio_info`.
+- `discount_rules` (monto_minimo/porcentaje)
+- `administradores` (v5): `user_id` con RLS y sin políticas; solo se lee por
+  `es_admin()`.
+- `access_codes` y `code_attempts`: **en desuso desde la v4**; no se borran
+  porque pedidos viejos las referencian.
 
-### Funciones (RPC, `security definer`)
-- **`crear_pedido(nombre, whatsapp, ciudad, notas, items, ip_hash, clave)`** —
-  la función central. Versión v4 (en `migracion-v4.sql`; las firmas viejas se
-  eliminan primero porque la nueva tiene la misma aridad y PostgreSQL no podría
-  decidir cuál llamar):
-  1. **Reintento seguro**: si `clave` ya existe en `orders.clave_idempotencia`,
-     devuelve ESE pedido con `repetido: true` y no toca nada más. Es lo que
-     hace que el doble toque en "Confirmar" no cree dos pedidos ni descuente el
-     stock dos veces.
-  2. **Límite por dispositivo**: máximo 6 pedidos confirmados por `ip_hash` en
-     10 minutos → `DEMASIADOS_PEDIDOS`. Cuenta filas ya confirmadas, no
-     intentos: el contador viejo se revertía junto con la excepción que lo
-     provocaba y por eso nunca contó nada.
-  3. Valida carrito no vacío y datos completos.
-  4. Primera pasada: bloquea cada producto (`for update`), suma TODAS las
-     líneas de ese producto (`v_cantidad_producto`, porque los tonos comparten
-     inventario) y valida stock contra esa suma →
-     `SIN_STOCK|nombre|disponible`. Esa misma suma es la que se le pasa a
-     `precio_unitario_para` para elegir el escalón (v3), no la cantidad de la
-     línea suelta. Calcula `subtotalNormal`.
-  5. Decide `por_mayor` comparando `subtotalNormal` contra
-     `store_settings.umbral_por_mayor` (default 200000).
-  6. Crea la fila `orders`.
-  7. Segunda pasada: precio final por línea (el más bajo si `por_mayor`; si
-     no, el escalón de la cantidad agrupada del producto), descuenta stock,
-     inserta `order_items` con `tono_snapshot`.
-  8. Calcula `porcentaje_descuento_para(subtotalBase)` y el `descuento`.
-  9. Actualiza `orders` con el desglose completo.
-  - Errores devueltos como excepciones con código: `SIN_STOCK|nombre|quedan`,
-    `PRODUCTO_NO_DISPONIBLE|nombre`, `SIN_PRECIO|nombre`, `CARRITO_VACIO`,
-    `DATOS_INCOMPLETOS`, `CANTIDAD_INVALIDA`, `DEMASIADOS_PEDIDOS` —
-    traducidos a mensajes amables en `src/app/carrito/actions.ts`
-    (`mensajeAmable`), que además señala QUÉ campo corregir.
-  - Solo `service_role` puede ejecutarla (revoke all from public).
-- **`productos_del_carrito(ids)`** (v4, `security definer`) — todo lo que el
-  carrito necesita de golpe: referencia, nombre, foto, stock, `activo` y
-  escalones. Es `security definer` por un motivo concreto: la lectura pública
-  solo ve productos con `activo = true`, así que un producto que la
-  administradora ocultara desaparecía de la bolsa sin dejar ni el nombre y la
-  clienta la veía encoger sola. Expone lo mínimo para poder decirle QUÉ se cayó.
-- **`refrescar_precios_producto`, `tocar_precios_producto`, `tocar_num_tonos`**
-  (v4) — disparadores que mantienen `products.precio_desde`, `precio_base` y
-  `num_tonos`. Existen porque el precio vive en `price_tiers` y no en
-  `products`: sin estas columnas no había forma de ordenar por precio ni de
-  paginar en la base, y había que traer los 591 productos a memoria.
-- **`cancelar_pedido(order_id)`** — devuelve stock a `products` sumando
-  `order_items`, idempotente vía bandera `stock_devuelto`, marca
-  `estado='cancelado'`.
-- `generar_codigo(nota?)` — **en desuso desde la v4**. Sigue existiendo en la
-  base (no estorba y borrarla obligaría a tocar `access_codes`), pero ya nadie
-  la llama: la pantalla del panel que la usaba se eliminó.
-- `precio_unitario_para`, `precio_mas_bajo`, `porcentaje_descuento_para`:
-  helpers SQL puros que reflejan `pricing.ts`/`discounts.ts`.
+### Funciones (RPC)
+- **`crear_pedido(nombre, whatsapp, ciudad, notas, items, ip_hash, clave)`**
+  (`security definer`, solo `service_role`; v4, sin cambios en la v5):
+  1. Reintento seguro: si `clave` ya existe, devuelve ESE pedido con
+     `repetido: true`.
+  2. Límite por dispositivo: máximo 6 pedidos por `ip_hash` en 10 minutos →
+     `DEMASIADOS_PEDIDOS`.
+  3. Valida carrito y datos.
+  4. Bloquea cada producto (`for update`), suma TODAS sus líneas y valida stock
+     → `SIN_STOCK|nombre|disponible`. Esa suma elige el escalón.
+  5. Decide `por_mayor` contra `umbral_por_mayor`.
+  6. Crea `orders`, inserta `order_items` con snapshot, descuenta stock,
+     calcula `porcentaje_descuento_para` y guarda el desglose.
+  - Errores: `SIN_STOCK`, `PRODUCTO_NO_DISPONIBLE`, `SIN_PRECIO`,
+    `CARRITO_VACIO`, `DATOS_INCOMPLETOS`, `CANTIDAD_INVALIDA`,
+    `DEMASIADOS_PEDIDOS`. `crear_pedido` no conoce las variantes: esa
+    validación vive en `confirmarPedido`.
+- **`productos_del_carrito(ids)`** (`security definer`, `anon` puede
+  ejecutarla, es de solo lectura): referencia, nombre, foto, stock, `activo` y
+  escalones, incluso de productos ocultos, para poder decirle a la clienta QUÉ
+  se cayó de su bolsa.
+- **`normalizar(text)`** (v5, inmutable: quita tildes y pasa a minúsculas) y
+  **`buscar_productos(p_grupos text[], p_categorias uuid[])`** (v5,
+  `security invoker`, `stable`, ejecutable por anon): un producto activo
+  coincide si cada grupo tiene alguna alternativa en
+  `normalizar(nombre ‖ referencia ‖ descripcion ‖ categoría ‖ departamento ‖
+  nombres de variantes)` o en la referencia compacta (sin separadores). Acota
+  a 10 alternativas y 120 caracteres.
+- **`es_admin()`** (v5, `security definer`, `stable`): true solo si el usuario
+  está en `administradores`. Revocada a `public` y `anon`.
+- **`cancelar_pedido(order_id)`**: devuelve el stock sumando por producto
+  (`group by product_id`), idempotente vía `stock_devuelto`.
+- **`cambiar_estado_pedido(order_id, estado)`** (v5, solo `service_role`):
+  transiciones válidas nuevo→pagado, nuevo→enviado, pagado→enviado,
+  pagado→nuevo, enviado→pagado, nuevo|pagado→cancelado (delega en
+  `cancelar_pedido`); `cancelado` es final. Lanza `TRANSICION_INVALIDA`.
+- `validar_dos_niveles` (disparador de categorías), `refrescar_precios_producto`,
+  `tocar_precios_producto`, `tocar_num_tonos` (mantienen las columnas
+  calculadas), `precio_unitario_para`, `precio_mas_bajo`,
+  `porcentaje_descuento_para`.
+- `generar_codigo`: en desuso desde la v4.
 
-### Row Level Security (`policies.sql`)
-- Lectura pública (`anon`, `authenticated`) solo de: categorías/productos
-  activos, price_tiers de productos activos, tonos de productos activos,
-  reglas de descuento activas, `store_settings` con `publico=true`.
-- `authenticated` (los 2 admins) tiene `for all` en todo.
-- **Sin política para `anon`** en `access_codes`, `orders`, `order_items`,
-  `code_attempts` — el único acceso público es a través de las funciones
-  `security definer`. Esto evita que cualquiera pueda leer códigos o pedidos
-  de otras personas.
-### Permisos de las funciones RPC (agujero encontrado y cerrado en la v4)
+### Row Level Security (`policies.sql` + v5)
+- Lectura pública (`anon`, `authenticated`) solo de categorías/productos
+  activos, sus escalones y tonos, reglas activas y `store_settings` con
+  `publico=true`.
+- Desde la v5, las políticas `*_admin` de categories, products, price_tiers,
+  product_shades, discount_rules, store_settings, orders, order_items y
+  access_codes usan `using ((select public.es_admin()))`; igual las de
+  `storage.objects` del bucket `productos` (insert/update/delete). Una cuenta
+  nueva con sesión no ve pedidos ni escribe (`tests-v5.sql` lo prueba).
+- `rls_auto_enable()` ya no es ejecutable por anon ni authenticated.
+- Sin política para `anon` en `orders`, `order_items`, `access_codes` y
+  `code_attempts`: el único acceso público es por funciones `security definer`.
 
-Supabase concede `EXECUTE` a `anon` y `authenticated` **por defecto** sobre las
-funciones del esquema `public`, y ese permiso es DIRECTO: el
-`revoke ... from public` que traían las migraciones **no lo quitaba**.
-
-Mientras existió el código de 4 dígitos daba igual —sin un código válido la
-llamada no llegaba a ninguna parte—, pero al quitarlo `crear_pedido` quedó
-alcanzable desde fuera con la clave anónima, la que va incrustada en el
-navegador y cualquiera puede leer, por `/rest/v1/rpc/crear_pedido`. Y quien
-llama directo manda `p_ip_hash` en null, así que **también se salta el límite
-por dispositivo**. Como cada pedido descuenta inventario, se podía vaciar el
-catálogo entero sin comprar nada.
-
-Estado actual, verificado contra la base:
+### Permisos de las funciones RPC
+Supabase concede `EXECUTE` a `anon` y `authenticated` por defecto, y ese permiso
+es DIRECTO: `revoke ... from public` no lo quita. Estado actual:
 
 | función | quién puede ejecutarla |
 |---|---|
 | `crear_pedido` | solo `service_role` |
 | `cancelar_pedido` | solo `service_role` |
-| `generar_codigo` | solo `service_role` (en desuso) |
-| `productos_del_carrito` | `anon` también — **intencional**, es de solo lectura |
+| `cambiar_estado_pedido` | solo `service_role` |
+| `es_admin` | `authenticated` (no `anon`) |
+| `productos_del_carrito`, `buscar_productos`, `normalizar` | `anon` también (solo lectura) |
 
-`scripts/probar-seguridad.mjs` ataca la base con la clave anónima y comprueba
-las dos caras: que no se pueda escribir ni leer lo ajeno, y que sí se pueda
-leer el catálogo y consultar la propia bolsa. Correrlo tras cualquier cambio
-en funciones o políticas.
+`scripts/probar-seguridad.mjs` ataca la base con la clave anónima. Correrlo
+tras cualquier cambio en funciones o políticas. Las funciones llevan
+`search_path` fijo.
 
-Las funciones también llevan `search_path` fijo: sin él, quien controle su
-propio `search_path` puede hacer que la función resuelva una tabla distinta de
-la que cree estar leyendo.
+- Desactivar «Allow new users to sign up» en Supabase Auth sigue siendo tarea
+  manual (y activar la protección de contraseñas filtradas).
 
-- Registro de nuevos usuarios debe desactivarse manualmente en Supabase
-  (Authentication → Providers → Email → "Enable sign ups" OFF) — de lo
-  contrario cualquiera podría registrarse y entrar al panel.
-
-### Storage
-- Bucket público `productos` para imágenes (políticas de lectura pública,
-  escritura/borrado solo `authenticated`).
-
-### Realtime
-- Tabla `orders` con replicación activada — el panel de pedidos se actualiza
-  solo sin refrescar (`TablaPedidos.tsx` se suscribe a `postgres_changes`).
+### Storage y Realtime
+- Bucket público `productos` para imágenes (lectura pública; escritura y
+  borrado solo administradoras).
+- Realtime publica `orders` (la v5 hace `alter publication supabase_realtime
+  add table`): el panel ve los pedidos nuevos sin recargar.
 
 ---
 
 ## 6. Rutas públicas (clientas)
 
+Todas las páginas de la tienda viven en `src/app/(tienda)/`; el catálogo va en
+`(tienda)/(catalogo)/` (ver «404 real» abajo). El layout de la tienda pinta
+`Encabezado`, el contenido, `Pie`, `BusquedaRapida`, `Avisos` y
+`SincronizarBolsa`.
+
 | Ruta | Descripción |
 |---|---|
-| `/` | Catálogo: banner, buscador (debounce 350ms, con estado "buscando" y botón de borrar), chips de categoría **con subcategorías** anidadas, selector de orden, cinta de beneficios, y grilla **paginada de 24 en 24** con botón "Ver más". `revalidate = 30`. |
-| `/producto/[referencia]` | Detalle: foto ampliable, escalones de precio, selector de tono con nombres, selector de cantidad, upsell, botón agregar. Metadatos propios por producto (el catálogo circula por WhatsApp y el enlace compartido debe decir de qué producto se trata). `revalidate = 30`. |
-| `/carrito` | **La compra entera**: bolsa + datos + confirmación en una sola pantalla (`VistaCarrito.tsx`). Ver abajo. |
-| `/confirmar` | Redirección a `/carrito`. Se conserva porque hay enlaces repartidos por chats de WhatsApp que apuntan aquí. |
-| `/c/[codigo]` | Redirección a `/carrito`. Los links mágicos de códigos siguen circulando; llevan a la bolsa en vez de dar 404. |
-| `/pedido/[id]` | Pantalla de éxito: número de pedido, **qué pasa ahora** (4 pasos), datos de pago con botón de copiar, resumen, botón "enviar comprobante por WhatsApp". `id` debe ser un UUID válido (regex) — actúa como llave de acceso sin necesitar login. `dynamic = "force-dynamic"`. |
-| `/api/diagnostico` | Endpoint protegido por header `x-clave-diagnostico` (env `CLAVE_DIAGNOSTICO`). Revisa variables de entorno (con huella parcial de secretos), conexión a la base, si Resend acepta la clave, y opcionalmente (`?correo=1`) envía un correo de prueba con la plantilla real. |
+| `/` | Catálogo: franja de beneficios generada de las reglas, campo de búsqueda (celular), pestañas de departamentos fijas bajo la cabecera, chips de subcategorías, barra de resultados («Labios · 43 productos» + orden), riel «Destacados» (solo sin filtros ni búsqueda), grilla de 24 en 24 con «Ver más productos» y «Viendo 48 de 372». Dinámico por `searchParams`, con datos desde caché. |
+| `/producto/[referencia]` | Ficha completa (ISR, `revalidate = 300`, `generateStaticParams` vacío). Desde la tienda, el mismo enlace abre la vista rápida. Un producto inexistente da 404 real. |
+| `/carrito` | **La compra entera**: bolsa + datos + confirmación (`VistaBolsa`). |
+| `/confirmar`, `/c/[codigo]` | Redirecciones a `/carrito` desde `next.config.ts` (enlaces viejos en chats de WhatsApp). |
+| `/pedido/[id]` | Pedido confirmado: cómo pagar, qué sigue y resumen. `id` debe ser UUID. `noindex`. Dinámico. |
+| `/mis-pedidos` | Pedidos confirmados desde este celular (viven en `localStorage`). |
+| `/privacidad` | Privacidad (Ley 1581) y condiciones de compra (Ley 1480). Versión «2026-11-10» en `lib/legal.ts`; la identidad legal (NIT, dirección) la completa la dueña y lo que esté en `null` no se muestra. |
+| `/api/catalogo` | GET «Ver más» (`categoria`, `orden`, `q`, `pagina`). `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`. |
+| `/api/buscar` | GET sugerencias (máx. 8, referencia exacta primero). Mismo `Cache-Control`. |
+| `/api/bolsa` | GET datos frescos de la bolsa (`ids`, máx. 60 UUID válidos). `no-store`. |
+| `/api/diagnostico` | Protegido por la cabecera `x-clave-diagnostico` (env `CLAVE_DIAGNOSTICO`, comparada con `timingSafeEqual`). Sin clave correcta responde 404. Revisa variables (con huella parcial de secretos), base y, solo con `?correo=1`, envía un correo de prueba. |
 
-### El checkout de una sola pantalla
+Las lecturas públicas van por GET o por componentes de servidor; el único
+Server Action público es `confirmarPedido`.
 
-El recorrido era: catálogo → bolsa → confirmar → listo, **y en medio había que
-salir a WhatsApp a pedir un código, esperar respuesta y volver**. Cuatro
-pantallas y una espera para comprar un labial. Ahora:
+### Catálogo
 
-catálogo → `/carrito` (bolsa + datos + confirmar) → `/pedido/[id]`
+- **Pestañas de departamentos** (`PestanasDepartamentos`, 44 px, fijas bajo la
+  cabecera): «Todo» y los departamentos, con la activa subrayada y centrada. Con
+  categorías planas (sin madres) muestran las raíces. Son `<Link scroll={false}>`:
+  funcionan con Atrás y se comparten por WhatsApp.
+- **`ChipsSubcategorias`**: «Todo en Labios», «Lip gloss»…
+- **Orden** (`BarraResultados`, `<select>` nativo): Recomendados, Precio: menor
+  a mayor, Precio: mayor a menor, Más nuevos.
+- **`ListaProductos`**: tandas de 24, botón explícito (no scroll infinito),
+  máximo 10 páginas, protección contra doble toque y duplicados. Deja la
+  página en la URL con `history.replaceState` (`?pagina=N`); el servidor pinta
+  las páginas 1..N si llega con ese parámetro, así volver de un producto no
+  pierde lo cargado.
+- **`TarjetaProducto`** (`memo`, subgrid de 5 filas): toda la tarjeta es un
+  `<Link>` a la ficha. Muestra categoría, nombre, «Ref.», «$8.000 c/u», «3 o
+  más: $7.500 c/u» (solo si hay un escalón al alcance del stock), acción y
+  estado («2 en tu bolsa», «Quedan 3»). Sin insignia «Combo», sin lupa.
+- **`AgregarRapido`**: con variantes es un enlace «Elegir tono · 6»; sin
+  variantes, «Agregar» (agrega 1, vibra, muestra el aviso) y luego un stepper
+  compacto; bajar a 0 quita con «Deshacer». Agotado: etiqueta sobre la foto y
+  sin botón. Sin precio: «Precio por confirmar».
+- **`RielDestacados`**: hasta 12 productos marcados `destacado`.
+- **`EstadoVacio`**: «No encontramos productos para "x"», con departamentos y
+  WhatsApp. Un `categoria` que no existe da vacío, no el catálogo entero.
 
-- Indicador de pasos visible ("1 Tu bolsa · 2 Tus datos · 3 Listo").
-- Barra inferior fija con el total y el botón de confirmar, que envía el
-  formulario con `form="form-pedido"` (así el total acompaña a la clienta por
-  toda la pantalla sin duplicar el formulario ni romper el envío con teclado).
-- Aviso explícito cuando la bolsa cambió (agotados, ajustes, retirados), con
-  botón "Entendido, actualizar mi bolsa". **Lo que se ve es lo que se envía.**
-- Campo opcional de notas ("es un regalo", "timbre 302") que llega al correo y
-  al panel.
-- Sección "Qué pasa después" con los 4 pasos del proceso, para que nadie se
-  quede esperando sin saber qué sigue.
-- Validación con mensaje por campo (`campo: "nombre" | "whatsapp" | ...`), que
-  además desplaza la pantalla hasta el aviso.
-- Al confirmar se marca el estado ANTES de vaciar la bolsa: si se vaciara
-  primero aparecía un parpadeo de "bolsa vacía" justo después de comprar.
+### Búsqueda
 
-### Pantallas de error (`error.tsx`, `global-error.tsx`, `not-found.tsx`)
+- `BusquedaRapida` (montada una vez por el layout): pantalla completa en el
+  celular, diálogo en escritorio. Debounce de 200 ms, mínimo 2 caracteres,
+  sugerencias con miniatura, nombre, «Ref.» y precio. Enter abre el producto
+  si la referencia coincide exacta («usk621» = «USK-621»); si no, `/?q=`. Se
+  cierra con Escape y con Atrás (`useHistorialHoja`).
+- `lib/data/busqueda.ts`: `normalizarTexto`, `gruposDeBusqueda(q)` (quita
+  palabras vacías, singulariza, máx. 5 grupos, sinónimos como rimel|mascara|
+  pestanina, blush|rubor, gloss|brillo, neceser|cosmetiquera, y el texto sin
+  separadores como alternativa para referencias) y `nivelDeCoincidencia`.
+  `filtroBusqueda` (para el panel) escapa la coma y los comodines de `ilike`.
+- **Relevancia**: en «Recomendados» con búsqueda, el orden se calcula en TS por
+  nivel de coincidencia (trae hasta 240 resultados; «gloss» abría con cepillos
+  y ahora abre con lip gloss). **Sin foto al final de cada página**, también en
+  Recomendados sin búsqueda. Las búsquedas no se cachean.
+- Una RPC con `.select()` solo se puede ordenar por columnas de ese select
+  (si no, PostgREST responde 42703): por eso las búsquedas piden el select de
+  la grilla más `orden`, `created_at` y `precio_base`.
 
-Sin ellas, cualquier fallo del servidor dejaba una pantalla en blanco con
-"Minified React error #441" y la venta se perdía ahí mismo. Ahora siempre hay
-mensaje claro, botón de reintentar sin recargar y salida por WhatsApp.
-`loading.tsx` pinta esqueletos con la forma de lo que viene, para que la espera
-no se lea como "se trabó".
+### La ficha (vista rápida y página)
 
-Componentes globales:
-- `BotonFlotante.tsx`: botón "Ver mi pedido" que aparece cuando hay unidades en
-  la bolsa, oculto en `/carrito`, `/confirmar`, `/admin/*`, `/pedido/*`. Se
-  suscribe solo al TOTAL (un número), no a la lista de líneas.
-- `VisorImagen.tsx`: modal de imagen a pantalla completa (Escape/click fuera
-  para cerrar, bloquea scroll del body).
-- `ui/Hoja.tsx`: hoja inferior reutilizable con trampa de tabulador, cierre con
-  Escape, devolución del foco y bloqueo del scroll de fondo.
+- **Vista rápida**: ruta interceptada `src/app/@modal/(.)producto/[referencia]`
+  (con `@modal/default.tsx` que da `null`). `ModalProducto` es una hoja a
+  pantalla completa en celular y un diálogo de máx. 1040 px en escritorio. Se
+  cierra con `router.back()` protegido contra el doble toque; si el producto
+  no existe muestra «Este producto ya no está disponible» + Cerrar.
+- **`FichaProducto`** (servidor) + **`PanelCompra`** (cliente): foto completa
+  (toque = ampliar), categoría, nombre, «Ref.», `PreciosPorCantidad` con el
+  escalón vigente resaltado («Puedes mezclar tonos: cuentan juntos para el
+  precio»), selector de variantes o cantidad, «En tu bolsa», descripción y
+  `RielRelacionados` («Más de {categoría}», máx. 8). `BarraFicha` lleva cerrar
+  y compartir (`navigator.share` o copiar enlace).
+- **Pie fijo**: «Agregar 3 · $22.500». Sin selección dice «Elige un tono» y
+  enfoca la lista con «Elige al menos un tono»; nunca queda deshabilitado sin
+  explicación. Al agregar: vibra 15 ms, muestra el aviso y limpia la selección;
+  en el modal además cierra.
+- El selector va en una columna también en el diálogo de escritorio (la
+  columna de compra mide unos 400 px y no cabrían dos filas con stepper).
+- Metadatos propios por producto (el catálogo circula por WhatsApp).
+- **404 real**: `notFound()` solo responde 404 si ocurre fuera de todo
+  `<Suspense>`. Por eso la ficha no tiene `loading.tsx` y el catálogo se movió a
+  `(tienda)/(catalogo)/` (su `loading.tsx` ya no envuelve a la ficha). Un
+  producto inexistente da 404 y `not-found.tsx` dice «Este producto ya no está
+  disponible».
+- **URL malformada**: una dirección como `/producto/100%25` o `/producto/%E0%A4%A`
+  responde 500 del enrutador de Next («failed to decode param») antes de llegar
+  a la página; ninguna referencia real lleva `%`, y no se amplió el proxy a
+  `/producto` para no pasar cada prefetch por él.
+
+### La bolsa (`/carrito`)
+
+`VistaBolsa` orquesta; las piezas viven en `components/bolsa/`:
+
+- `useBolsa`: pide `/api/bolsa` solo cuando el carrito ya se hidrató (nada de
+  llamadas vacías), reconcilia, calcula totales y ofrece `reintentar()` real.
+- `GrupoProducto` y `LineaVariante`: miniatura 64 px, nombre (enlace a la
+  ficha), «Ref.», precio unitario aplicado, y una fila por variante con
+  stepper (mínimo 1) y papelera. Quitar muestra «Quitaste Tono 3 · Deshacer».
+- `AvisoCambios` y avisos por línea (stock). `ProgresoBeneficio`: barra +
+  «Te faltan $12.000 para el 5 % de descuento».
+- `ResumenBolsa`: Subtotal, Descuento, **Total productos** y «Envío:
+  {envio_info}».
+- `FormularioDatos` (`useDatosFormulario`): Nombre, WhatsApp (acepta espacios y
+  +57), Ciudad, «Agregar una nota (opcional)» y «Recordar mis datos en este
+  celular» (desmarcada por defecto; usa `lib/celular.ts`). Aviso legal y «Aquí
+  no pagas nada todavía».
+- `BarraConfirmar`: barra fija con el total; con campos vacíos dice «Completar
+  mis datos» y enfoca el primero; completa: «Confirmar pedido · $45.000».
+- `PantallaConfirmando`, `BolsaVacia` («Ver el catálogo» + pedidos recientes),
+  `PedidosRecientes`: si hay un pedido de las últimas 12 horas en el celular,
+  avisa «Ya hiciste el pedido AB-0098 hoy» y el nuevo viaja como **adicional**
+  (`[Adicional a AB-xxxx]` antepuesto a la nota).
+- `useConfirmarPedido`: navega y vacía la bolsa dentro del propio manejador
+  (primero se marca el estado, para que no parpadee «bolsa vacía»).
+- Panel sin `sticky` en escritorio: con el formulario es más alto que la
+  pantalla, fijo escondería el botón.
+
+### `confirmarPedido` (`(tienda)/carrito/actions.ts`)
+
+Validaciones antes del RPC: nombre ≤ 80, ciudad ≤ 60, WhatsApp de 7 a 15
+dígitos, nota ≤ 300, máx. 40 líneas, 1–50 por línea y 150 unidades en total
+(`PEDIDO_MUY_GRANDE`: «escríbenos por WhatsApp»), variantes vigentes y sin
+agotar. Después de crear el pedido: guarda `politica_version` y
+`politica_aceptada_en` (solo la primera vez), invalida la etiqueta `catalogo`
+con `revalidateTag("catalogo", "max")` y manda el correo dentro de `after()`.
+Un reintento (`repetido: true`) no invalida ni envía correo otra vez.
+
+### Pedido confirmado (`/pedido/[id]`)
+
+- Cabecera: check, «¡Pedido confirmado!», «Pedido AB-0098» grande, `mensaje_exito`
+  como línea secundaria. **La página respeta el estado**: en `pagado`/`enviado`
+  no muestra «Cómo pagar» y marca los pasos cumplidos; en `cancelado` dice
+  «Pedido cancelado» y que no hay que pagarlo (quien vuelve desde «Mis
+  pedidos» no debe ver «Transfiere $124.000» de un pedido ya despachado).
+- `TarjetaPago`: «Transfiere $45.000 por {método}», número con «Copiar número»
+  (si el método es una llave, «Copiar llave»), titular, «Copiar valor» y envío.
+  Botón primario «Ya pagué: enviar comprobante» → WhatsApp del negocio con el
+  mensaje completo y el enlace del pedido (`window.location.origin`).
+- `PasosPedido` (3 pasos), `ResumenPedido` (productos agrupados, desglose, «Total
+  productos»), «Volver al catálogo».
+- **`GuardarPedido` guarda solo al llegar desde «Confirmar»**
+  (`/pedido/{id}?nuevo=1`, y luego quita el parámetro con `replaceState`), no en
+  cualquier visita: si guardara al montar, el celular de la dueña acumularía los
+  pedidos de las clientas al abrir el enlace del comprobante, y su bolsa diría
+  «Ya hiciste el pedido…». Máx. 20 pedidos guardados (`anaya-pedidos`).
+- `lib/data/pedido-publico.ts`: solo lo que la clienta ya conoce (sin notas
+  internas, IP ni claves).
+
+### Componentes globales
+
+- `Encabezado` (cabecera fija de 56 px), `BotonBolsa` (contador con
+  `aria-label «Bolsa, 3 unidades»`), `BarraBeneficios`, `Pie` (Mis pedidos,
+  Privacidad, WhatsApp, SIC), `MisPedidos`, `SincronizarBolsa`.
+- `Avisos` + `lib/avisos.ts` (`mostrarAviso`, `cerrarAviso`): un aviso a la
+  vez, `role="status"`, 5 s, con pausa por puntero y foco; acción «Ver bolsa»
+  o «Deshacer».
+- `ui/`: `Boton` (+ `BotonEnlace`, `estilosBoton`), `Campo`, `Stepper`, `Hoja`
+  (trampa de tabulador, Escape, devolución del foco, bloqueo de scroll),
+  `VisorImagen` (pellizco y doble toque, hasta 2×), `Esqueleto`, `Giro`,
+  `Iconos` (set de línea propio, WhatsApp es el único relleno), `Insignia`,
+  `Marca` (logotipo recortado de `logo.jpeg` en `public/marca/anaya-beauty.png`).
+- Hooks: `useCompraProducto`, `useBolsa`, `useConfirmarPedido`,
+  `useBloquearScroll`, `useHistorialHoja` (Atrás cierra la hoja en vez de sacar
+  a la clienta de la tienda; los enlaces dentro de la hoja navegan con
+  `replace`), `usePresencia`.
+- Pantallas de error: `error.tsx` («Algo no cargó bien», reintentar sin
+  recargar, WhatsApp), `global-error.tsx` (colores de `lib/marca.ts`),
+  `not-found.tsx`, y `loading.tsx` con esqueletos de la forma de lo que viene.
+- `opengraph-image.png` 1200×630 con el logo completo.
 
 ## 7. Panel de administración (`/admin/*`)
 
-Protegido por `middleware.ts`: cualquier ruta bajo `/admin` sin sesión
-Supabase redirige a `/admin/login`; con sesión, `/admin/login` redirige a
-`/admin`. Solo existen usuarios creados a mano (sin registro abierto).
+Protegido por `src/proxy.ts` (Next 16 renombró `middleware` a `proxy`): sin
+sesión **y sin fila en `administradores`** (`rpc("es_admin")`), toda ruta bajo
+`/admin` redirige a `/admin/login`. Cada página, lectura y acción vuelve a
+llamar `exigirAdmin()` (`lib/admin/sesion.ts`, cacheado por petición; falla
+cerrado). Solo existen usuarios creados a mano.
+
+Navegación (`NavegacionPanel`): barra inferior en celular con Pedidos (con
+contador de nuevos), Productos, Recibos y Más; lateral en escritorio;
+`aria-current`. El panel tiene `loading.tsx` y `error.tsx` propios.
 
 | Ruta | Descripción |
 |---|---|
-| `/admin/login` | Login con correo/clave (`supabase.auth.signInWithPassword`). |
-| `/admin` | Lista de pedidos con tarjetas de resumen (pedidos hoy, ventas hoy, sin confirmar pago, total), filtro por estado (nuevo/pagado/enviado/cancelado), búsqueda por nombre/número/whatsapp. Cada pedido muestra la **nota de la clienta** destacada, que es lo primero que necesita quien despacha. Se actualiza en tiempo real vía Supabase Realtime — no hay que refrescar durante un live. Cada pedido es expandible: ver líneas, cambiar estado (cancelar devuelve stock automáticamente vía `cancelar_pedido`), enlace directo a WhatsApp del cliente. |
-| `/admin/productos` | Lista con búsqueda, indicadores de agotado/por agotarse/oculto. Enlaces a "Nuevo producto" e "Importar CSV". |
-| `/admin/productos/[id]` (incluye `nuevo`) | Formulario completo: referencia, nombre, descripción, categoría, imagen (subida a Supabase Storage, máx 5MB), escalones de precio dinámicos (con vista previa de cómo lo verá la clienta para 1/3/6/12 unidades), tonos de color dinámicos (input de color + nombre), checkbox "visible en el catálogo". Nunca borra productos (solo `activo=false`) porque pedidos históricos los referencian. |
-| `/admin/productos/importar` | Importador CSV: sube archivo, parsea client-side (`csv.ts`), muestra vista previa con tabla de precios calculados, importa (upsert por referencia — reimportar el mismo archivo actualiza en vez de duplicar). Columnas: `referencia,nombre,descripcion,categoria,stock,precio_1,precio_3,precio_6` (solo precio_1 obligatorio). |
-| `/admin/categorias` | Crear categorías/subcategorías (`categoria_padre_id`), reordenar (campo orden), "ocultar" (soft-delete vía `activo=false`). |
-| `/admin/descuentos` | Configurar umbral de precio por mayor y reglas de descuento por porcentaje (crear/activar/desactivar/eliminar). Explica la cascada de cálculo con un ejemplo. |
-| `/admin/recibos` | Arma un recibo y lo descarga como PDF con la identidad de marca (logo, colores, mensaje de agradecimiento). Dos modos: "Desde un pedido" (prellena todo con los datos ya cobrados, sin recalcular nada) o "Manual" (busca productos del catálogo, agrega líneas con tono/cantidad, y calcula el total con el mismo motor de descuentos que el carrito). El PDF se genera 100% en el navegador con `src/lib/pdf/recibo.ts` (jsPDF) — no depende de un servidor de renderizado. El modo manual no crea un pedido real ni descuenta stock. |
-| `/admin/configuracion` | Ajustes editables sin tocar código: método/número/titular de pago, WhatsApp del negocio, mensaje de agradecimiento, horas de vigencia del código. Solo ciertas claves son `publico=true` (visibles en la web). |
-| `/admin/qr` | Genera y descarga QR (alta resolución, corrección de error "H") apuntando a `NEXT_PUBLIC_SITE_URL`, con consejos de uso en vivo. |
+| `/admin/login` | Login con correo/clave. |
+| `/admin` | Pedidos **en vivo** (`PedidosEnVivo`, Realtime sobre `orders`) con indicador «En vivo / Reconectando», refresco al volver a la pestaña, el pedido nuevo resaltado y contador en el título. Cada tarjeta muestra el siguiente paso como botón («Confirmar pago» si nuevo, «Marcar enviado» si pagado), «Cancelar» aparte (con confirmación y guardia contra doble toque), «Cobrar por WhatsApp», «Avisar envío» y «Recibo» (`/admin/recibos?pedido=id`). Los estados pasan por `cambiar_estado_pedido`. KPIs del día en hora de Bogotá, aparte del filtro. La nota «[Adicional a AB-xxxx]» se ve destacada. |
+| `/admin/productos` | Lista con filtros (Todos, Activos, Ocultos, Agotados, Sin foto, Destacados), categoría y búsqueda; en cada fila «Ocultar/Mostrar» y «Destacar»; volver conserva `?q=`; aviso «Guardado». |
+| `/admin/productos/[id]` (incluye `nuevo`) | Formulario: referencia, nombre, descripción, categoría, etiqueta de variante («Según la categoría»), destacado, imagen, escalones, editor de variantes con interruptor «Agotado», subir/bajar y guardado por id (actualiza, inserta y borra; nunca borra todo para reinsertar). Valida todo antes de escribir. Eliminar solo dentro de la ficha, con confirmación. |
+| `/admin/productos/importar` | Importador CSV con resumen de cambios antes de confirmar. En referencias existentes solo actualiza columnas con valor (una celda vacía nunca borra ni pone en 0) y nunca toca `activo`. Columnas: `referencia,nombre,descripcion,categoria,stock,precio_1,precio_3,precio_6`; una referencia nueva necesita nombre y `precio_1`. Plantilla en `public/plantilla-productos.csv`. |
+| `/admin/categorias` | Lista editable: nombre (el slug no cambia), madre (solo departamentos), orden (subir/bajar), etiqueta de variante, activar/ocultar y número de productos. |
+| `/admin/descuentos` | Umbral de precio por mayor y reglas por porcentaje. |
+| `/admin/recibos` | Recibos personalizables (abajo). |
+| `/admin/configuracion` | Ajustes con lista fija de claves: método/número/titular de pago, WhatsApp del negocio (validado: 57 + 10 dígitos), mensaje de éxito, umbral y «Información de envío» (`envio_info`, ≤ 300; por defecto «El envío se coordina por WhatsApp después de confirmar tu pedido.»). La tienda usa `whatsapp_negocio` con la constante `WHATSAPP_RESPALDO` como respaldo. |
+| `/admin/qr` | QR en alta resolución, corrección «H», módulos oscuros, apuntando a `urlSitio()` + `/?o=qr` (el parámetro marca las visitas que llegan por QR). |
 
-Todas las acciones de escritura del panel verifican sesión (`exigirSesion` en
-`acciones-pedidos.ts`) antes de usar el cliente con clave de servicio
-(`clienteAdmin`), porque ese cliente se salta RLS.
+- **Acciones**: contrato único `Resultado<T> = { ok: true } | { ok: false;
+  error }` y `Boton cargando`. Todas llaman `exigirAdmin()` primero y usan
+  `clienteAdmin` (se salta RLS) después. Cada escritura invalida su caché
+  pública (`lib/data/invalidar.ts`: `invalidarCatalogo`, `invalidarPrecios`,
+  `invalidarConfig`, con `expire: 0`), también en un fallo parcial al guardar un
+  producto.
+- **Fotos**: se comprimen en el navegador (JPEG 0,85, lado máx. 1600 px, sin
+  metadatos) antes de subir; límite de 5 MB (`imagen.ts`); error real en
+  pantalla; la foto anterior se borra del bucket al reemplazar. Subir y borrar
+  van por `clienteAdmin` tras comprobar la sesión, y `subirImagen` **devuelve**
+  el error en vez de lanzarlo (una excepción en un Server Action llega al
+  navegador como «Minified React error #441»).
+- Enlaces del panel a la tienda usan `<a target="_blank">` para no abrir la
+  vista rápida sobre el panel. Fechas con `timeZone: "America/Bogota"`.
 
-**Storage:** subir y borrar imágenes también va por `clienteAdmin` (tras
-comprobar la sesión). Las políticas de escritura del bucket `productos` que
-describe `supabase/README.md` nunca se aplicaron a la base, así que con la
-sesión del usuario `upload` devolvía "new row violates row-level security
-policy" y `remove` fallaba en silencio (0 objetos, el archivo se quedaba).
-Además `subirImagen` **devuelve** el error en vez de lanzarlo: una excepción
-dentro de un Server Action llega al navegador como "Minified React error
-#441", con el mensaje real borrado por React en producción.
+### Recibos personalizables
+
+> Nota: se escribió según la ficha de la Tarea 12 mientras otro agente
+> terminaba el código; revisa los nombres de archivo contra `src/app/admin/(panel)/recibos/`.
+
+Arma un recibo y lo descarga como PDF con la identidad de marca. Sigue sin
+crear pedidos ni descontar stock, y no guarda nada en la base.
+
+1. **Dirigido a**, editable en los dos modos: nombre (obligatorio), documento
+   o NIT, WhatsApp, ciudad y dirección (opcionales). «Desde un pedido» lo
+   rellena con los datos del pedido y se puede cambiar (el recibo puede ir a
+   nombre de otra persona o empresa); «Volver a los datos del pedido» lo
+   restaura.
+2. **Productos en texto libre**: descripción, cantidad y precio unitario, para
+   envíos, productos fuera del catálogo o servicios. En el PDF salen sin
+   referencia.
+3. **Personalizar**: título (por defecto «Recibo»; ≤ 40, p. ej. «Cuenta de
+   cobro»), número (editable), fecha (por defecto hoy en Bogotá, editable), nota
+   al pie (≤ 400, varias líneas) y la casilla «Mostrar los datos de pago».
+   Título, nota y casilla se recuerdan en este navegador (`localStorage`,
+   clave `anaya-recibo-preferencias`, con try/catch) y hay «Restablecer».
+4. **Totales**: las líneas del catálogo y del pedido conservan su cálculo
+   (escalones, por mayor, porcentaje y los ajustes manuales). Las líneas de
+   texto se suman **después del descuento**: no cuentan para el porcentaje ni
+   para el precio por mayor.
+5. **Vista previa** en pantalla con los mismos datos del PDF, «Descargar PDF»
+   (deshabilitado con explicación si falta el nombre o no hay líneas) y
+   «Compartir» si el navegador soporta `navigator.canShare({ files })`.
+6. **PDF** (`src/lib/pdf/recibo.ts`, jsPDF en el navegador): título
+   personalizado, bloque «Dirigido a» sin huecos ni «null», nota con ajuste de
+   ancho, datos de pago solo si la casilla está marcada y salto de página
+   correcto.
+
+La lógica pura y probada vive en `src/lib/admin/recibo.ts` (`Destinatario`,
+`LineaTexto`, `PreferenciasRecibo`, `destinatarioDePedido`, `validarLineaTexto`,
+`totalesDeRecibo`, `leerPreferencias`/`guardarPreferencias`, `reciboListo`). La
+interfaz se parte en piezas dentro de `recibos/` con un hook `useRecibo`.
 
 ## 8. Correo (`src/lib/email/`)
 
-- `send-order.ts`: `enviarCorreoPedido` vía Resend. **Nunca lanza** — el
-  pedido ya está guardado y visible en el panel (fuente de verdad principal)
-  — pero **sí informa**: devuelve `ResultadoCorreo`
-  (`{ok:true, id}` | `{ok:false, motivo}`) y registra el motivo con
-  `console.error`.
-  - **Por qué devuelve resultado y no `void`:** el SDK de Resend NO lanza
-    cuando la API rechaza el envío, devuelve `{ data: null, error }`. El
-    `try/catch` original solo atrapaba fallos de red, así que un rechazo de
-    la API (el 403 de abajo, un 429, un destinatario suprimido) se perdía en
-    silencio: la administradora se quedaba sin avisos y sin ninguna señal de
-    por qué. Verificado en `__tests__/send-order.test.ts`.
-- `order-template.ts`: plantilla HTML con estilo de marca (rosa/fucsia),
-  escapa todo el texto del usuario (`escapar`), desglose de descuentos solo si
-  hubo beneficio, botón "Ver en el panel". Desde la v4 lleva la **nota de la
-  clienta** en lugar del antiguo "código usado" — algo que de verdad le sirve a
-  quien despacha. Los colores del correo también se ajustaron al contraste AA.
-- **Restricción del modo prueba de Resend (la causa habitual de "no llegan
-  los correos"):** mientras no haya un dominio verificado, el remitente es el
-  compartido `onboarding@resend.dev` y Resend **solo entrega a la dirección
-  dueña de la cuenta** (`anayabeauty54@gmail.com`). Cualquier otro valor de
-  `CORREO_DESTINO` recibe un 403 `validation_error`:
-  *"You can only send testing emails to your own email address"*. Para enviar
-  a otra dirección hay que verificar un dominio en resend.com/domains y
-  cambiar el `from`.
-- Límite del plan gratis de Resend: 100 correos/día, 3000/mes. La respuesta
-  de la API trae el uso acumulado en las cabeceras `x-resend-daily-quota` y
-  `x-resend-monthly-quota`.
+- `send-order.ts`: `enviarCorreoPedido` vía Resend. **Nunca lanza** (el pedido ya
+  está guardado) pero **sí informa**: devuelve `ResultadoCorreo`
+  (`{ok:true, id}` | `{ok:false, motivo}`) y registra el motivo. El SDK de
+  Resend NO lanza cuando la API rechaza el envío, devuelve `{ data: null,
+  error }`; sin mirarlo, un 403 o un 429 se perdían en silencio.
+- `order-template.ts`: plantilla HTML con colores solo de `PALETA`
+  (`lib/marca.ts`), sin emoji, escapa todo el texto del usuario, «Descuento
+  5 %», «Total productos», «Ref.», la **nota de la clienta** y el botón al
+  panel (`/admin?q=<número>`) con el origen desde el que se confirmó (cabecera
+  `Origin` de la acción, con respaldo en `NEXT_PUBLIC_SITE_URL`).
+- **Modo prueba de Resend** (causa habitual de «no llegan los correos»):
+  mientras no haya dominio verificado, el remitente es `onboarding@resend.dev`
+  y Resend **solo entrega a la dirección dueña de la cuenta**. Cualquier otro
+  `CORREO_DESTINO` recibe un 403 `validation_error`. Para otra dirección hay
+  que verificar un dominio en resend.com/domains y cambiar el `from`.
+- Límite del plan gratis: 100 correos/día, 3000/mes (cabeceras
+  `x-resend-daily-quota` y `x-resend-monthly-quota`).
 
-## 9. CSV (`src/lib/csv.ts`)
+## 9. CSV (`src/lib/csv.ts`, `src/lib/admin/importacion.ts`)
 
-`parsearCSV(texto)`: parser manual (respeta comillas y comas dentro de
-comillas), convierte precios en formato colombiano ("$35.000" → 35000),
-valida fila por fila acumulando errores sin detener el proceso, arma
-escalones (1 obligatorio, 3 y 6 opcionales).
+`parsearCSV(texto)`: parser manual (respeta comillas), precios en formato
+colombiano ("$35.000" → 35000), valida fila por fila acumulando errores.
+`planImportacion` decide qué haría el archivo sin escribir nada (nuevos,
+cambios, sin cambios y avisos: referencia repetida, precio por cantidad más caro
+que el de 1, categoría inexistente, textos demasiado largos).
 
 ## 10. Utilidades (`src/lib/`)
 
-- `imagen.ts`: `validarImagen` / `rutaDeImagen` para las fotos de producto. La
-  ruta en el bucket es siempre `uuid.extension`: el nombre original trae
-  espacios y hasta barras ("WhatsApp Image 2026-08-31 at 7.21.50 PM.jpeg").
-- `format.ts`: `pesos(valor)` → "$27.000" (Intl.NumberFormat es-CO);
-  `enlaceWhatsApp(mensaje)` → link `wa.me` con mensaje codificado;
-  `WHATSAPP_NEGOCIO` hardcodeado como fallback (573228813646).
-- `slug.ts`: `generarSlug` — normaliza tildes, minúsculas, guiones.
-- `types.ts`: tipos centrales (`Producto`, `Categoria`, `Tono`,
-  `LineaCarrito`, `Pedido`, `LineaPedido`, `EstadoPedido`, `Codigo`,
-  `EstadoCodigo`).
+- `format.ts`: `pesos`, `fechaCorta`, `fechaHora` (es-CO, hora de Bogotá).
+- `whatsapp.ts`: `enlaceWhatsApp(mensaje, numero?)`, `normalizarWhatsapp`,
+  `WHATSAPP_RESPALDO`.
+- `rutas.ts`: `rutaProducto`, `decodificarReferencia` (decodifica una sola vez,
+  con try/catch), `ordenDeParametro`, `urlCatalogo`.
+- `sitio.ts`: `urlSitio()` = `NEXT_PUBLIC_SITE_URL` → URL de producción de
+  Vercel → `http://localhost:3000` (QR, `metadataBase`, enlaces absolutos).
+- `categorias.ts`: `arbolDeCategorias`, `idsDeCategoria` (la categoría y sus
+  hijas), `departamentoDe`.
+- `celular.ts`: datos y pedidos guardados en el celular (`anaya-datos`,
+  `anaya-pedidos`), siempre con try/catch.
+- `ids.ts` (`esUuid`), `dispositivo.ts` (`vibrar`), `clave-segura.ts`
+  (`clavesIguales`), `color.ts` (luminancia y contraste), `marca.ts` (`PALETA`
+  para correo, PDF y `global-error`), `imagen.ts`, `imagen-navegador.ts`,
+  `slug.ts`, `legal.ts`, `types.ts`.
 
 ## 11. Capa de datos (`src/lib/data/`)
 
-- `catalog.ts`: consultas públicas (solo activos). Dos decisiones de la v4:
-  - **La grilla no trae los tonos.** Un producto puede tener 40 y con 591
-    productos eran decenas de miles de filas por pantalla para pintar unos
-    círculos que casi nadie quería mirar. Solo viaja `num_tonos`; los tonos se
-    piden con `obtenerTonosDeProducto` al abrir la hoja.
-  - **La grilla se pagina en la base** (`POR_PAGINA = 24`, `count: "exact"`,
-    `.range()`). Antes se traía la tabla entera para poder ordenarla por precio,
-    porque el precio vive en `price_tiers`; las columnas `precio_desde` /
-    `precio_base` de la v4 dejan que PostgreSQL ordene y corte. Hay desempate
-    estable por `id`: sin él, dos productos con el mismo precio pueden cambiar
-    de sitio entre página y página y salir repetidos o perdidos.
-  - Un `categoriaSlug` que no existe devuelve lista vacía, no el catálogo
-    completo (que haría pensar que el filtro no funciona).
-  - También: `obtenerProductoPorReferencia`, `obtenerCategorias`,
-    `obtenerConfiguracionPublica`, `obtenerReglasDescuento`,
-    `obtenerConfiguracionDePrecios`, y `mapearProducto` (fila de Supabase →
-    tipo `Producto`) reutilizado por el panel admin.
-- `busqueda.ts`: `filtroBusqueda(texto, columnas)` — arma el argumento de
-  `.or()` de PostgREST. Hay **dos** trampas en la misma cadena:
-  1. *La coma.* En `or(...)` separa condiciones, así que el término crudo hacía
-     que buscar "base, matte" devolviera "failed to parse logic tree": la
-     consulta lanzaba y la página moría con un 500 ("Minified React error
-     #441" en el navegador). Se resuelve entrecomillando el valor.
-  2. *Los comodines de LIKE.* `%` y `_` son comodines de `ilike`, no texto:
-     buscar "50%" traía todo lo que empezara por "50", y "A_1" traía también
-     "A11" y "AB1". Ahora se escapan (la barra invertida primero, o escaparía
-     los escapes siguientes).
+- `publico.ts` (en `supabase/`): cliente anon **sin cookies**; todas las
+  lecturas públicas lo usan, así las páginas se pueden cachear.
+- `etiquetas.ts`: `ETIQUETA = { catalogo, precios, config }` y
+  `VERSION_DATOS = "v5"` (súbela si cambia la forma de los datos cacheados).
+- `catalogo.ts`: `unstable_cache` (revalidate 300) para categorías, páginas sin
+  búsqueda, destacados, ficha por referencia (además en React `cache()`) y
+  relacionados. `obtenerProductos` pagina en la base (`POR_PAGINA = 24`,
+  `count: "exact"`, `.range()`), ordena por `precio_base` con desempate por `id`
+  y limita a 10 páginas y 80 caracteres de búsqueda. La grilla no trae variantes
+  (`num_tonos`); la ficha sí (`CAMPOS_FICHA`). Errores: nunca devolver vacío en
+  silencio, lanzar y dejar que `error.tsx` ofrezca reintentar. También
+  `mapearProducto`, `obtenerSugerencias`, `obtenerRelacionados`.
+- `configuracion.ts`: `obtenerConfiguracionPublica()` tipada (mensaje de éxito,
+  umbral, WhatsApp, `envioInfo`, pago) y `obtenerConfiguracionDePrecios()`.
+- `bolsa.ts`: `obtenerDatosBolsa(ids)` (RPC `productos_del_carrito` + variantes
+  + reglas), sin caché.
+- `pedido-publico.ts`, `orders.ts` (panel, `clienteAdmin`), `admin-catalog.ts`
+  (sin filtrar por `activo`), `errores.ts` (`falla`).
+- `paginacion.ts`: `traerTodas(consultar)` pide por páginas de 1000 porque
+  PostgREST recorta a su `max-rows` sin error (con 591 productos, 76 desaparecían
+  del buscador del recibo).
+- `invalidar.ts`: ver sección 7.
 
-  Lo usan los tres buscadores: catálogo público, productos del panel y pedidos
-  del panel.
-- `paginacion.ts`: `traerTodas(consultar)` — pide la tabla por páginas de 1000
-  con `.range()` hasta agotarla. Existe porque PostgREST recorta toda respuesta
-  a su `max-rows` **sin devolver error**: `obtenerProductos` y
-  `listarProductosAdmin` tenían un `.limit(500)` fijo y, con 591 productos
-  cargados, 76 productos con precio desaparecían del buscador del recibo manual
-  sin ninguna señal. Toda consulta que deba devolver el catálogo completo pasa
-  por aquí; cada página arma su propia consulta porque los builders de PostgREST
-  son mutables y de un solo uso.
-- `admin-catalog.ts`: mismas consultas pero sin filtrar por `activo` (usa
-  `clienteAdmin`, ve todo).
-- `orders.ts`: consultas del panel (usa `clienteAdmin`). `obtenerPedidoPorId`
-  valida que el `id` tenga forma de UUID antes de consultar (es la llave de
-  acceso pública a la pantalla de éxito). `codes.ts` se eliminó con la v4.
+## 12. Sistema visual y accesibilidad
 
-## 12. Componentes de catálogo/producto (`src/components/`)
+El público son personas jóvenes **y mayores de 40**, en celular y muchas veces
+en la calle.
 
-- `catalogo/`:
-  - `Encabezado` (banner; se recorta en celular con `max-h-[38vh]` porque a su
-    proporción original no cabía ni un producto en la primera pantalla).
-  - `CintaBeneficios`: dice arriba del todo cómo se ahorra (escalones, precio
-    por mayor, % extra). Los descuentos solo se descubrían al llegar al
-    carrito, cuando ya estaba todo elegido; saberlo antes cambia lo que la
-    clienta mete en la bolsa, y además es lo honesto.
-  - `Buscador` (debounce 350ms, indicador de "buscando", botón de borrar;
-    reinicia a la primera tanda al cambiar el término).
-  - `ChipsCategorias` (con segunda fila de subcategorías: antes existían en los
-    datos pero no había forma de llegar a ellas, así que una tienda de 591
-    productos solo se podía filtrar en bloques enormes). Son enlaces de verdad,
-    no botones con JavaScript: funcionan con el botón atrás y se pueden
-    compartir por WhatsApp, que es como circula este catálogo.
-  - `OrdenProductos`: `<select>` **nativo** a propósito — abre la rueda del
-    sistema con el tamaño de letra que la persona tenga configurado y funciona
-    con teclado y lector de pantalla sin reimplementar nada. Ordenar por precio
-    existía en el código pero no había ningún control para usarlo.
-  - `ListaProductos`: la grilla por tandas de 24 con botón "Ver más" y contador
-    ("Viendo 24 de 591"). Botón explícito y no scroll infinito: con scroll
-    infinito nunca se llega al pie y no se sabe cuánto falta. Protege contra
-    duplicados si se toca dos veces seguidas.
-  - `TarjetaProducto` (`memo`): compra directa desde la tarjeta para productos
-    sin tonos; botón "Elegir tono" que abre la hoja para los que sí tienen.
-    **Ya no pinta la paleta.** El precio que se pinta es el que de verdad se
-    está cobrando: `precioUnitarioPara(escalones, max(1, unidadesEnLaBolsa))` —
-    nunca `precioDesde`, que confundía porque no coincidía con el cobro. La
-    hoja y el visor se cargan con `next/dynamic` al abrirlos.
-- `producto/`:
-  - `PanelCompra` (detalle: aquí sí caben los tonos en línea, es una sola
-    pantalla y hay sitio de sobra).
-  - `HojaCompra`: tono + cantidad + precio en vivo + lo que ya lleva, sobre la
-    hoja inferior. Carga los tonos al abrirse; si un producto tiene un solo
-    tono, se da por elegido y la clienta se ahorra un toque.
-  - `SelectorTonos`: botones de 44px con nombre debajo, agrupados por familia y
-    con buscador cuando la paleta es larga.
-  - `FotoProducto`, `TablaEscalones`, `SelectorCantidad`.
-  - Pruebas: `PanelCompra.test.tsx`, `SelectorTonos.test.tsx`.
-- `ui/`: `Boton` (4 variantes, 2 tamaños, estado `cargando` con giro y
-  `aria-busy`), `Iconos` (SVG inline), `Insignia`, `VisorImagen`, `Hoja`,
-  `Esqueleto`.
-- `carrito/BotonFlotante.tsx`.
-
-## 12 bis. Accesibilidad y legibilidad
-
-El público de esta tienda son personas jóvenes **y mayores de 40**, en celular
-y muchas veces en la calle. Lo que se corrigió:
-
-- **Contraste.** La paleta original fallaba WCAG AA (4.5:1) en los dos
-  sentidos: texto rosa sobre blanco 4.10, texto lila sobre blanco 3.17 y —el
-  más caro— **texto blanco sobre el rosa del botón principal, 4.10**. "Agregar"
-  y "Confirmar" son los dos botones de los que vive la tienda. Ahora
-  `--color-fucsia: #d11a72` (5.12 con blanco encima) y `--color-lila: #8956b8`
-  (5.14). El rosa original queda como `fucsia-vivo`, solo para adornos sin
-  texto: la marca no cambia de color, cambia de profundidad donde hace falta
-  leer.
-- **`contraste.test.ts` lee `globals.css`** y comprueba los colores que la web
-  usa de verdad. Si alguien "aviva" la marca otra vez, la prueba se cae y dice
-  cuánto contraste perdió.
-- **Tamaños.** Nada por debajo de 12px; base de 16px reales en `body` (por
-  debajo, Safari en iPhone hace zoom solo al enfocar un campo y descoloca la
-  pantalla). Se eliminaron todos los `text-[10px]` y `text-[11px]`.
-- **Objetivos táctiles** de 44px como mínimo, 52px en los botones principales.
-- **Zoom permitido** (`maximumScale: 5`): para quien no ve de cerca, poder
-  ampliar es la diferencia entre poder comprar y no poder.
-- `touch-action: manipulation` quita el retardo de ~300ms del toque, que hacía
-  que cada botón "respondiera tarde" y la clienta lo pulsara dos veces.
-- Foco visible siempre; enlace "Saltar al catálogo"; `aria-live` en cantidades,
-  totales y estados de búsqueda; `role="alert"` en los errores.
-- Toda animación por debajo de 300ms y anulada con `prefers-reduced-motion`.
+- **Tokens** en `globals.css` (`@theme`): `fondo` #ffffff, `superficie`
+  #f7f3f5, `tinta` #261c22, `tinta-suave` #6d5765, `linea`, `borde` #8e7d88
+  (≥ 3:1), `acento` #d11a72 (relleno de la acción principal, 5,12:1 con blanco),
+  `acento-hondo`, `firma` #8956b8 (solo la etiqueta de categoría), `ahorro`,
+  `alerta`, `error` (cada uno con su `-fondo`) e `inactivo`. Un solo acento
+  fucsia; sin Playfair ni Nunito.
+- **`contraste.test.ts`** lee `globals.css` y comprueba los pares reales (AA en
+  texto, borde ≥ 3:1, blanco sobre acento y acento-hondo, tinta-suave sobre
+  inactivo…). Si alguien «aviva» la marca, la prueba se cae.
+- **Tipografía**: Figtree, base de 16 px (nunca menos en campos: por debajo,
+  Safari en iPhone hace zoom solo), `tabular-nums` en precios y cantidades;
+  nada por debajo de 12 px.
+- **Objetivos táctiles** de 44 px como mínimo. **Zoom permitido**
+  (`maximumScale: 5`). `touch-action: manipulation` quita el retardo del toque.
+- Foco visible siempre (anillo acento); «Saltar al contenido» y «Saltar a los
+  productos»; `aria-live` en cantidades y totales; `role="alert"` en errores;
+  etiquetas visibles y errores junto al campo con `aria-describedby`.
+- Nada de `<a><button>`: los enlaces con aspecto de botón usan `BotonEnlace`.
+  El stepper y los textos de ayuda no usan opacidad para atenuar.
+- Movimiento de 120 a 220 ms, anulado con `prefers-reduced-motion`; hover solo
+  bajo `@media (hover: hover)`. Sombras planas: solo `shadow-flotante` (avisos)
+  y `shadow-hoja`.
+- Sin emoji ni «princesa»; textos cortos; la única exclamación del recorrido es
+  «¡Pedido confirmado!».
 
 ## 13. Autenticación (`src/lib/supabase/`)
 
-- `client.ts`: cliente de navegador (`createBrowserClient`, anon key) — usado
-  para Realtime en el panel.
-- `server.ts`: cliente de servidor (`createServerClient`, anon key, maneja
-  cookies) — respeta RLS, usado en Server Components/Actions que actúan "como
-  el usuario".
+- `client.ts`: cliente de navegador (anon key), usado para Realtime en el panel.
+- `server.ts`: cliente de servidor con cookies; respeta RLS. Queda para el panel.
+- `publico.ts`: cliente anon sin cookies, `server-only`, para las lecturas
+  públicas.
 - `admin.ts`: cliente con `SUPABASE_SERVICE_ROLE_KEY` (`server-only`, se salta
-  RLS) — usado en la capa admin de datos y en `crear_pedido`/`cancelar_pedido`.
-- `src/proxy.ts` (antes `middleware.ts` — Next 16 renombró la convención;
-  la función exportada se llama `proxy`, no `middleware`): refresca sesión y
-  protege `/admin/:path*`.
+  RLS): capa admin de datos, `crear_pedido`, `cancelar_pedido` y
+  `cambiar_estado_pedido`.
+- `src/proxy.ts`: refresca la sesión, comprueba `es_admin` y protege
+  `/admin/:path*`.
 
 ## 14. Scripts (`scripts/*.mjs`, ejecutar con `node --env-file=.env.local`)
 
-- **`verificar-migracion.mjs`**: comprueba que la base tenga aplicado todo lo
-  que el código espera (columnas, funciones, coherencia de `precio_desde`). No
-  escribe nada. **Correr antes de desplegar**: la v4 cambia la firma de
-  `crear_pedido`, así que desplegar la web antes que el SQL deja la tienda
-  cerrada, no degradada.
+- **`verificar-migracion.mjs`**: comprueba que la base tenga lo que el código
+  espera (migraciones v4 y v5) y avisa de ajustes de seguridad pendientes. No
+  escribe nada. Correr antes de desplegar.
 - `crear-admin.mjs <correo> <clave>`: crea o actualiza un usuario del panel
-  (confirmado automáticamente).
-- `sembrar-ejemplo.mjs`: carga categorías y productos de ejemplo para
-  desarrollo (idempotente).
-- `probar-flujo.mjs`: prueba end-to-end contra la base real — pedido sin
-  código, stock, **reintento seguro** (la misma clave no duplica ni descuenta
-  dos veces), precio no manipulable, rechazo por stock y por datos
-  incompletos, nota de la clienta, y cancelación. Crea y destruye su propio
-  producto `TEST-FLUJO`: antes usaba `REF-101` del sembrado de ejemplo y
-  fallaba entero con `PRODUCTO_NO_DISPONIBLE` en cuanto ese producto quedaba
-  oculto desde el panel, sin que hubiera nada roto.
-- `probar-descuentos.mjs`: verifica que `crear_pedido` en SQL cobre EXACTAMENTE
-  lo mismo que `discounts.ts` en TypeScript, para 9 escenarios (sin beneficio,
-  %, por mayor + %, no-reversión del por mayor, tonos en snapshot, tonos
-  comparten stock, **tonos suman para el escalón**, **productos distintos no
-  suman entre sí**, precio no manipulable). Limpia todo al final.
-- `probar-correo.mjs`: envía un correo de prueba con la plantilla real
-  (independiente de la app, para diagnosticar Resend).
-- `probar-e2e-correo.mjs`: prueba end-to-end **a través de la app**, no del
-  RPC. Requiere `next dev` corriendo. Dispara el server action
-  `confirmarPedido` por HTTP igual que el navegador (lee los ids de action de
-  `.next/dev/server/app/carrito/page/server-reference-manifest.json` — desde la
-  v4 el action vive en `/carrito` — y codifica los argumentos con el
-  `encodeReply` de React; enviar un `FormData` suelto devuelve "Connection
-  closed"). Comprueba que el pedido se guarde, que cobre el escalón correcto,
-  que la nota llegue y que la clave de idempotencia quede guardada. Existe
-  porque `probar-flujo.mjs` llama a `crear_pedido` directamente y por eso nunca
-  ejercitaba el server action ni el envío del correo. Limpia todo al final.
-- `probar-mejora-imagen.mjs`: **piloto/experimental**, no toca producción.
-  Descarga 3 fotos del catálogo Engol ya subidas, las manda a Gemini
-  (`gemini-3-pro-image-preview`, alias "Nano Banana Pro") pidiendo mejora de
-  calidad profesional en 4K sin alterar el producto, guarda resultado en
-  `scripts/_piloto-imagenes/` para revisión manual antes de aplicarlo a más
-  fotos. Requiere `GEMINI_API_KEY`.
-- `cargar-catalogo-engol.mjs`: **importador masivo** desde `Catalogo_Engol.xlsx`
-  (archivo en la raíz del proyecto, no versionado normalmente). Extrae el
-  .xlsx como zip (requiere `unzip` en PATH), parsea XML de hojas específicas
-  (`Accesorios`, `Cosmeticos`, `Natacion`), extrae imágenes incrustadas por
-  fila, crea categoría padre = nombre de hoja + subcategoría hija = columna
-  "Categoria", sube imágenes al bucket `productos/catalogo-engol/`, crea/
-  actualiza productos en modo **borrador** (`activo=false`, `stock=0`, sin
-  precios) para completar manualmente desde el panel. Maneja referencias
-  duplicadas en el Excel sufijándolas. Reporta filas con el logo de Engol
-  detectado en la foto (hoja `Logo_en_producto`) para revisión. Es seguro
-  reejecutar (upsert por referencia).
-- `_piloto-imagenes/generar-favicon.mjs`: recorta el logo (detecta el círculo
-  sólido descartando el glow/sombra) y genera `favicon.ico`, `icon.png`,
-  `apple-icon.png` en `src/app/`. Requiere `sharp` y `png-to-ico` (no están en
-  `package.json` — instalación puntual/manual).
+  (confirmado) **y lo registra en `administradores`** (sin esa fila no ve
+  pedidos ni la web lo deja entrar).
+- `sembrar-ejemplo.mjs`: categorías y productos de ejemplo para desarrollo.
+- `probar-flujo.mjs`: prueba end-to-end contra la base real (pedido sin código,
+  stock, reintento seguro, precio no manipulable, rechazos, nota y
+  cancelación). Crea y destruye su propio producto `TEST-FLUJO`.
+- `probar-descuentos.mjs`: verifica que `crear_pedido` cobre EXACTAMENTE lo mismo
+  que `discounts.ts` en 9 escenarios. Limpia todo al final.
+- `probar-seguridad.mjs`: ataca la base con la clave anónima (ver sección 5).
+- `probar-correo.mjs`: correo de prueba con la plantilla real, independiente de
+  la app.
+- `probar-e2e-correo.mjs`: prueba a través de la app (requiere `next dev`):
+  dispara el server action `confirmarPedido` por HTTP, leyendo los ids de
+  `.next/dev/server/app/carrito/page/server-reference-manifest.json`. Nota: tras
+  mover la tienda a `(tienda)/`, confirma que esa ruta del manifiesto siga
+  existiendo antes de contar con él.
+- `probar-mejora-imagen.mjs`: **piloto/experimental**, no toca producción
+  (Gemini, requiere `GEMINI_API_KEY`).
+- `cargar-catalogo-engol.mjs`: importador masivo desde `Catalogo_Engol.xlsx`
+  (requiere `unzip`). Crea categoría padre = hoja y subcategoría = columna
+  «Categoria», sube fotos a `productos/catalogo-engol/` y **solo agrega
+  referencias nuevas**, en borrador (`activo=false`, `stock=0`, sin precios):
+  usa `upsert` con `ignoreDuplicates: true` y las fotos con `upsert: false`. Las
+  referencias que ya están en la base no se tocan (ni foto, ni nombre, ni
+  stock, ni visibilidad). **No es un «actualizar»**: para cambiar productos
+  existentes usa el panel o su importador CSV.
+- `generar-marca.mjs`: recorta el logotipo de `logo.jpeg` a
+  `public/marca/anaya-beauty.png` y crea `opengraph-image.png` (requiere
+  `sharp`, que está en devDependencies).
+- `_piloto-imagenes/generar-favicon.mjs`: genera `favicon.ico`, `icon.png` y
+  `apple-icon.png`; requiere `sharp` y `png-to-ico` (no están en
+  `package.json`).
 
-## 15. Trabajo en curso / archivos no versionados (al momento de este escaneo)
+## 15. Pruebas
 
-Según `git status`, estos archivos existen en el working tree pero no están
-commiteados — parecen ser una migración de catálogo real en curso (marca
-"Engol"), separada del negocio "Anaya Beauty":
+- **`npm test` (Vitest): 867 pruebas en 92 archivos** (eran 211 en la v4; las
+  de recibos pueden sumar más cuando termine la Tarea 12). Entorno `node` por
+  defecto; `// @vitest-environment jsdom` solo en pruebas de componentes. En
+  Windows córrelo con la ruta `C:/Users/...` (con `c:` minúscula falla por doble
+  carga).
+  - `src/lib/`: `pricing`, `discounts`, `cart` (incluye `restaurar` y la
+    garantía de identidad), `compra`, `variantes`, `categorias`, `busqueda`,
+    `reconciliar`, `mensajes`, `celular`, `avisos`, `rutas`, `sitio`, `csv`,
+    `format`, `slug`, `imagen`, `imagen-navegador`, `storage`, `paginacion`,
+    `catalogo-consultas`, `catalogo-mapeo`, `bolsa-datos`, `pedido-publico`,
+    `orders-datos`, `configuracion`, `send-order`, `order-template`,
+    `recibo-pdf`, `contraste`, `marca` y las del panel (`admin-*`: ajustes,
+    categorías, filtros, importación, pedidos, producto, sesión, variantes,
+    proxy).
+  - Componentes: tarjeta, agregar rápido, pestañas, lista, búsqueda rápida,
+    ficha, modal, panel de compra, selector de variantes, precios por cantidad,
+    bolsa, formulario de datos, tarjeta de pago, resumen y guardado del pedido,
+    avisos, hoja, stepper, botón, y del panel (navegación, pedidos en vivo,
+    tabla y tarjeta de pedido, editor de variantes, importación, recibos).
+  - Rutas: `bolsa`, `catalogo-buscar`, `diagnostico`, `estado-404` (un producto
+    inexistente responde 404 real), error global, acciones de carrito y panel.
+- `npm run build`: tipos + compilación. `npx tsc --noEmit` debe quedar limpio.
+- `supabase/tests-v4.sql`: 12 comprobaciones (disparadores, motor de precios,
+  pedido sin código, variantes que suman escalón, reintento seguro, atomicidad,
+  límite por dispositivo, cancelación idempotente).
+- `supabase/tests-v5.sql`: 11 comprobaciones en una transacción con `rollback`:
+  `normalizar`, `buscar_productos` («usk621», «pestanas», «brocha polvo»),
+  categorías de dos niveles, etiquetas y columnas nuevas, `es_admin`, que una
+  cuenta nueva no administra nada, `cancelar_pedido` con dos tonos del mismo
+  producto, `cambiar_estado_pedido`, `envio_info` y `mensaje_exito`, que toda
+  escritura exige `es_admin()` y que Realtime publica `orders`.
+- `scripts/verificar-migracion.mjs` y `scripts/probar-seguridad.mjs`: estado y
+  seguridad de la base. Los `probar-*.mjs` son pruebas de integración contra la
+  base real, para correr a mano al tocar precios, descuentos o el flujo.
+- Regla: nunca pulsar «Confirmar pedido» contra la base real.
 
-- `Catalogo_Engol.xlsx` — fuente de datos para `cargar-catalogo-engol.mjs`.
-- `logo.jpeg` — posible logo nuevo/alternativo.
-- `scripts/cargar-catalogo-engol.mjs`, `scripts/probar-mejora-imagen.mjs`.
-- `scripts/_piloto-imagenes/*-original.jpeg` — fotos de muestra descargadas
-  por el piloto de mejora de imagen (EUP-632, SO1909, SY-9502).
-
-Esto sugiere una tarea en progreso de: (1) importar un catálogo de productos
-real desde Excel con fotos incrustadas, y (2) evaluar mejorar esas fotos con
-IA antes de publicarlas. Ninguno de los dos scripts toca datos de producción
-de forma destructiva (el importador crea todo en borrador; el de imágenes solo
-lee y guarda localmente).
-
-## 16. Pruebas
-
-- **`npm test` (Vitest): 211 pruebas** (eran 122). Sobre `src/lib/`:
-  `pricing`, `discounts`, `cart` (incluida la garantía de identidad de líneas
-  de la que depende el rendimiento), `csv`, `format`, `slug`, `catalog-mapeo`,
-  `order-template`, `paginacion` (regresión del tope de 500 productos),
-  `busqueda` (regresión de la coma **y** de los comodines de LIKE), `imagen`,
-  `storage`, `send-order` (regresión del correo que fallaba en silencio), y las
-  nuevas:
-  - `reconciliar` — que lo que muestra el carrito sea exactamente lo que se
-    envía al servidor;
-  - `tonos` — familias de color, filtrado sin tildes, agrupado sin pérdidas;
-  - `contraste` — **lee `globals.css`** y comprueba que la paleta real cumpla
-    WCAG AA.
-
-  De componente: `PanelCompra.test.tsx`, `SelectorTonos.test.tsx`,
-  `TarjetaProducto.test.tsx` (incluye que la grilla NO pinte la paleta).
-- `npm run build`: verificación de tipos + compilación.
-- `supabase/tests-v4.sql`: 12 comprobaciones SQL dentro de una transacción que
-  termina en `rollback` — se puede correr en producción sin miedo. Cubre
-  disparadores, motor de precios, pedido sin código, tonos que suman escalón,
-  productos que no suman entre sí, reintento seguro, precio no manipulable,
-  atomicidad del stock, límite por dispositivo, cancelación idempotente y nota
-  de la clienta. (`tests.sql` quedó obsoleto.)
-- `scripts/verificar-migracion.mjs`: estado de la base antes de desplegar.
-- `scripts/probar-seguridad.mjs`: ataca la base con la clave anónima del
-  navegador y comprueba que no se pueda crear pedidos, cancelar, leer datos de
-  otras clientas ni tocar el inventario.
-- Los scripts `probar-*.mjs` son pruebas de integración contra la base real
-  (no mockeada), pensadas para correrse manualmente cuando se toca la lógica
-  de precios/descuentos/flujo.
-
-## 17. Variables de entorno relevantes
+## 16. Variables de entorno relevantes
 
 `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
-`RESEND_API_KEY`, `CORREO_DESTINO`, `SAL_HASH_IP`, `CLAVE_DIAGNOSTICO`
-(para `/api/diagnostico`), `GEMINI_API_KEY` (solo para el piloto de imágenes).
+`RESEND_API_KEY`, `CORREO_DESTINO`, `SAL_HASH_IP`, `CLAVE_DIAGNOSTICO` (para
+`/api/diagnostico`; su valor no se escribe en ningún documento y vive solo en
+Vercel y en tu `.env.local`), `GEMINI_API_KEY` (solo para el piloto de
+imágenes). `VERCEL_PROJECT_PRODUCTION_URL` la pone Vercel y `urlSitio()` la usa
+de respaldo.
+
+## 17. Pendientes de la dueña o el dueño
+
+Desactivar «Allow new users to sign up» y activar la protección de contraseñas
+filtradas en Supabase Auth; rotar `CLAVE_DIAGNOSTICO` en Vercel; decidir si
+siguen los 10k de «abrir bolsa» y qué son; poner el texto real de envío en
+Ajustes; completar la identidad legal en `/privacidad`; limpiar tonos con la
+hoja de contacto (accesorios «Tono N», hex no confiables, fotos que no cuadran,
+marcar agotados con el interruptor en vez de borrar). Detalle en la sección 6
+del estudio.
 
 ## 18. Cómo actualizar este documento
 
 Cuando cambie algo estructural (nueva ruta, nueva tabla, cambio en el motor de
 precios/descuentos, nuevo script), edita la sección correspondiente en vez de
 regenerar todo el archivo. Si se agregan features grandes, agrega una sección
-nueva siguiendo el mismo estilo (una tabla o lista con la ruta/archivo y qué
-hace).
+nueva siguiendo el mismo estilo. El código manda sobre este documento.

@@ -125,10 +125,10 @@ Severidad: **crítica**, rompe la compra o expone datos o dinero hoy; **alta**, 
 
 **Baja · Agregar no confirma qué se agregó y los estados vacíos no orientan.** La hoja se cierra al agregar sin decir tono ni total (`HojaCompra.tsx:95-102`); la búsqueda vacía solo sugiere «una palabra más corta» (`ListaProductos.tsx:113-133`); `not-found.tsx` dice «Este producto ya no está» en cualquier 404, también con un pedido inexistente. Propuesta: aviso «Agregado: {producto} · {tono} · Ver bolsa»; vacíos con salida a categorías y WhatsApp; 404 según la ruta.
 
-**Decisiones abiertas de experiencia.**
-- *Dónde se elige el tono.* Hay cuatro propuestas: conservar la hoja y agregarle «Ver detalles» (comparativo); que la tarjeta abra la ficha en modal y la hoja se vuelva una lista con cantidad por tono (experiencia); elegir el tono dentro del modal y retirar `HojaCompra` y `cargarTonos` (Next.js); o dejar `PanelCompra` y `HojaCompra` como envoltorios de un mismo hook (código). Todas coinciden en una sola lógica de compra; difieren en el contenedor. Cualquiera sirve si la foto se ve completa a todo el ancho y la cantidad va por tono.
-- *Taxonomía de categorías.* Hay tres versiones: 7 grupos del comparativo con conteos reales (Rostro 28, Ojos y cejas 42, Labios 43, Brochas y herramientas 69, Cabello 60, Uñas y piel 57, Bolsos y accesorios 71); otros 7 de experiencia (con Skin care y Uñas y cabello); y 8 de datos (con Otros). Se decide con la dueña.
-- *Fila «En el live ahora».* No puede ser una categoría, porque cada producto tiene una sola (`supabase/schema.sql:35`): meterlo ahí lo saca de la suya. Hace falta un campo o una tabla con orden que la anfitriona marque desde el panel.
+**Lo que se decidió (antes, decisiones abiertas de experiencia).**
+- *Dónde se elige el tono.* En la ficha. La tarjeta abre el producto en una vista rápida con URL propia, el tono se elige dentro de ella con cantidad por tono, y se retiran `HojaCompra` y `cargarTonos`. Una sola lógica de compra (`compra.ts`).
+- *Taxonomía de categorías.* 7 departamentos: Rostro; Ojos y cejas; Labios; Brochas y herramientas; Cuidado personal; Cabello y peinado; Bolsos y accesorios. Los productos siguen en sus categorías hijas y filtrar por el departamento incluye a las hijas. Ya está aplicado en producción (26 categorías, 370 productos).
+- *Fila «En el live ahora».* No se hizo. Se resolvió con el campo `destacado` de cada producto, que la dueña marca desde el panel y alimenta el riel «Destacados» (solo sin filtros ni búsqueda).
 
 ### 4.2 Diseño visual y textos (señales de «hecho por IA»)
 
@@ -188,7 +188,7 @@ La auditoría de textos trae 165 propuestas con archivo y línea (`audit_visual_
 | `producto/[referencia]/page.tsx:54` y otras | «Seguir viendo», «Seguir comprando», «Seguir viendo el catálogo» | «Volver al catálogo» |
 | `not-found.tsx:13` | «Este producto ya no está» en cualquier 404 | «No encontramos esta página» |
 
-**Decisiones abiertas de diseño.** Si el fucsia va también en el precio (el comparativo dice sí; diseño dice no). Si la bolsa va en la cabecera, en un botón flotante o en ambos (la maqueta usa ambos). Para el botón de la grilla hay acuerdo en el contorno; el negro queda descartado.
+**Lo que se decidió (antes, decisiones abiertas de diseño).** El fucsia no va en el precio: es solo el relleno de la acción principal, el contador de la bolsa y el anillo de foco. La bolsa va en la cabecera con contador, y se retira el botón flotante. El botón de la grilla es de contorno; el negro queda descartado.
 
 ### 4.3 Tonos y fotos
 
@@ -416,7 +416,43 @@ Investigación sobre el flujo previsto (specs v1 y v2, plan, `Funcionalidades.md
 
 ## 5. Decisiones del rediseño
 
-Esta sección la completa el equipo de implementación al cerrar el rediseño.
+Las 15 decisiones de diseño (§3 del spec `docs/superpowers/specs/2026-11-10-rediseno-catalogo-design.md`) y los acuerdos que se tomaron al implementarlas. La v5 está en producción.
+
+### Las 15 decisiones de diseño
+
+1. **Sistema visual sobrio.** Blanco, tinta casi negra y un solo acento fucsia, con la tipografía Figtree. Se rechaza la propuesta «lujo negro y dorado» de la herramienta de diseño: borraba el fucsia de la marca.
+2. **Bolsa en la cabecera.** Icono con contador y un aviso al agregar con «Ver bolsa». Se retira la píldora flotante «Ver mi pedido», que tapaba precios y botones.
+3. **La vista rápida es la ficha.** Un modal interceptado con URL propia. Se retira `HojaCompra`: el tono se elige dentro de la ficha, en el modal o en la página.
+4. **Selector multi-variante en lista**, en el orden de la foto y nunca agrupado por familia de color. El círculo de color solo aparece si las muestras del producto son confiables.
+5. **Etiqueta de variante por producto**, con herencia de la categoría y del departamento: Tono, Color, Diseño, Modelo, Aroma, Largo o Paleta. Rostro, Ojos y cejas y Labios dicen «Tono»; el resto, «Color».
+6. **Agotado por tono como bandera** (`product_shades.agotado`), sin stock por tono. La dueña deja de borrar tonos para marcarlos agotados.
+7. **7 departamentos** madres. Los productos siguen en sus categorías hijas y filtrar por la madre incluye a las hijas.
+8. **Los 10k de «abrir bolsa».** La v4 eliminó el código a propósito y no se reintroduce ningún cobro previo. El banner sale de la tienda. Queda como pregunta para la dueña.
+9. **Envío.** No hay tarifa en ninguna parte. Nuevo ajuste público `envio_info`, editable en el panel; el total se rotula «Total productos».
+10. **Legal mínimo.** Página `/privacidad`, aviso junto a «Confirmar» y registro de la versión aceptada en cada pedido. La identidad legal (NIT, dirección) la completa la dueña.
+11. **Caché pública sin cookies.** `unstable_cache` con etiquetas e ISR de la ficha; se invalida al confirmar pedidos y al guardar en el panel. No se activa Cache Components.
+12. **Lecturas por GET** (`/api/catalogo`, `/api/buscar`, `/api/bolsa`). El único Server Action público es `confirmarPedido`.
+13. **Seguridad.** Tabla `administradores` y `es_admin()` en todas las políticas de escritura, en el proxy y en las acciones del panel. Realtime publica `orders`. La clave de diagnóstico sale de la documentación.
+14. **Mensaje de éxito.** El título fijo es «¡Pedido confirmado!», la única exclamación del recorrido. El ajuste `mensaje_exito` pasa a «Gracias por comprar en Anaya Beauty.» como línea secundaria.
+15. **Sin muestras de color en la tarjeta.** Dice «6 tonos» o «4 colores» en texto.
+
+### Acuerdos tomados al implementar
+
+- **Oleadas en paralelo.** Las tareas corrieron en paralelo con archivos disjuntos en un solo árbol. Los implementadores no hacen commit; el orquestador commitea por tarea tras la revisión (por tiempo).
+- **La migración la aplica el orquestador.** La Tarea 1 no toca producción: prueba en `begin/rollback` y la aplica quien orquesta tras revisarla. Se aplicó `migracion-v5.sql` y se verificó (2 administradoras de siempre, 9 políticas `es_admin` más las del bucket, Realtime en `orders`, búsquedas como anon).
+- **Búsqueda acotada.** `buscar_productos` acepta como mucho 10 alternativas y 120 caracteres: una RPC pública sin tope no es aceptable.
+- **El grupo alterno sin separadores se resuelve en SQL**, comparando cada alternativa también con la referencia compacta. Mismo comportamiento, más simple («usk 621» sigue funcionando).
+- **URL del sitio.** El helper `urlSitio()` usa `NEXT_PUBLIC_SITE_URL`, luego la URL de producción de Vercel y por último localhost; el enlace del pedido en WhatsApp usa `window.location.origin`. Así no quedan QR ni enlaces apuntando a un dominio muerto.
+- **AgregarRapido usa la bolsa y `resumenDeCompra` directamente**, no `useCompraProducto`, contra lo previsto en el §7.3 del spec. Evita una dependencia entre tareas de la misma oleada; cuesta una pequeña duplicación.
+- **Búsqueda por relevancia en «Recomendados».** Se ordena en TS por nivel de coincidencia (traer hasta 240 resultados es trivial con unos 370 productos). «gloss» abría con cepillos; ahora abre con lip gloss.
+- **Sin foto al final de cada página** en Recomendados: AZARA, sin foto, abría el catálogo.
+- **404 real.** Un producto inexistente respondía 200 con `noindex`. Se resolvió moviendo el catálogo a `(tienda)/(catalogo)/`, para que su `loading.tsx` no envuelva la ficha, que no tiene `loading.tsx`.
+- **El pedido solo se guarda en el celular al llegar desde «Confirmar»** (`?nuevo=1`). Si guardara al abrir el enlace, el celular de la dueña acumularía los pedidos de las clientas.
+- **La página del pedido respeta el estado.** Con un pedido pagado, enviado o cancelado no pide pagar de nuevo.
+- **Recibos personalizables** (pedido nuevo del dueño). Destinatario editable, productos en texto libre, título, fecha y nota. Las líneas de texto se suman después del descuento; las preferencias viven en `localStorage`, sin base.
+- **URL malformada.** Una dirección como `/producto/100%25` responde 500 del enrutador de Next, antes de llegar a la página. Ninguna referencia real lleva `%` y no se amplía el proxy a `/producto` (cada prefetch pasaría por él). Costo: quien escribe esa URL a mano ve la página de error.
+- **Revisión.** Hasta 2 rondas de arreglo por tarea dentro del flujo; lo que quedó abierto lo adjudicó el orquestador o pasó a la integración.
+- **Producción.** La v5 se publicó con el SQL primero, la web después y los departamentos al final, con respaldo (rama `respaldo/antes-rediseno`).
 
 ---
 

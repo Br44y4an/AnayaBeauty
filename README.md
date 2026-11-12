@@ -1,23 +1,22 @@
 # Anaya Beauty — Catálogo digital
 
-Catálogo de maquillaje pensado para vender en transmisiones en vivo de TikTok.
+Catálogo de maquillaje para vender en transmisiones en vivo de TikTok. Las
+clientas entran por un QR o un enlace de WhatsApp, arman su pedido con precios
+que bajan según la cantidad y **lo confirman en el momento**, sin códigos ni
+esperas. El cobro se coordina después por WhatsApp y se verifica a mano. Cada
+pedido llega al panel en vivo y por correo.
 
-Las clientas entran por un QR, arman su pedido con precios que bajan según la
-cantidad, y **lo confirman en el momento**, sin códigos ni esperas. El cobro se
-coordina después por WhatsApp y se verifica a mano. Cada pedido llega al panel
-en tiempo real y por correo.
+Producción: https://anaya-beauty-tau.vercel.app
 
-> **v4:** desapareció el código de 4 dígitos y la bolsa y la confirmación se
-> juntaron en una sola pantalla. Antes de desplegar hay que ejecutar
-> `supabase/migracion-v4.sql` — ver [SETUP.md](SETUP.md).
-
-**Guía de puesta en marcha:** [SETUP.md](SETUP.md)
-**Diseño y decisiones:** [docs/superpowers/specs/](docs/superpowers/specs/)
+**Versión actual: v5** (rediseño de la tienda y del panel). Qué hace cada pieza:
+[Funcionalidades.md](Funcionalidades.md). Puesta en marcha: [SETUP.md](SETUP.md).
+Diseño y decisiones: [docs/superpowers/specs/](docs/superpowers/specs/) y el
+[estudio](docs/estudio/2026-11-10-estudio-completo.md).
 
 ## Stack
 
-Next.js 16 · TypeScript · Tailwind 4 · Supabase (Postgres, Auth, Storage,
-Realtime) · Resend · Vitest. Todo en capa gratuita.
+Next.js 16 · TypeScript · React 19 · Tailwind 4 · Supabase (Postgres, Auth,
+Storage, Realtime) · Resend · Zustand · jsPDF · Vitest. Todo en capa gratuita.
 
 ## Arranque local
 
@@ -27,57 +26,77 @@ cp .env.example .env.local     # y completa los valores
 npm run dev
 ```
 
+Next 16 cambió varias convenciones (por ejemplo `proxy.ts` en vez de
+`middleware.ts`). Antes de tocar una API de Next, lee `node_modules/next/dist/docs/`.
+
 ## Pruebas
 
 ```bash
-npm test            # 211 pruebas: precios, carrito, tonos, contraste, correo…
-npm run build       # verificación de tipos y compilación
+npm test            # Vitest: precios, carrito, búsqueda, tonos, contraste, panel, recibos…
+npx tsc --noEmit    # tipos
+npm run build       # tipos y compilación
 ```
 
-La lógica de negocio en la base de datos se verifica ejecutando
-`supabase/tests-v4.sql` en el editor SQL de Supabase: 12 comprobaciones —dentro
-de una transacción que termina en `rollback`, así que es seguro correrlas en
-producción— que cubren precios, tonos, reintentos duplicados, stock
-insuficiente, cancelaciones y límite por dispositivo.
+En Windows, corre Vitest desde una ruta con `C:` mayúscula; con `c:` falla.
 
-Antes de desplegar, `node --env-file=.env.local scripts/verificar-migracion.mjs`
-comprueba que la base tenga aplicado todo lo que el código espera.
+La lógica en la base se verifica en el editor SQL de Supabase con
+`supabase/tests-v4.sql` y `supabase/tests-v5.sql`. Terminan en `rollback`
+(`tests-v4.sql` sí gasta números de pedido). Para comprobar que la base tiene lo
+que el código espera: `node --env-file=.env.local scripts/verificar-migracion.mjs`.
+
+## Orden de despliegue
+
+1. **SQL primero**: `supabase/migracion-v5.sql` y `tests-v5.sql`. Es compatible
+   con la web anterior. Si la web sale antes, el catálogo responde 500.
+2. **Web después**: merge a `master` y Vercel publica.
+3. **Departamentos al final**: `supabase/migracion-v5-departamentos.sql`. Antes de
+   publicar la web, la versión vieja los mostraría vacíos.
+
+Para revertir los departamentos: `supabase/revertir-v5.sql`. El resto de la v5 se
+queda, porque la web vieja funciona con ello. Detalle y orden completo en
+[supabase/README.md](supabase/README.md).
 
 ## Cómo está organizado
 
 ```
+src/app/(tienda)/         Tienda: catálogo, ficha, bolsa, pedido, mis pedidos, privacidad
+src/app/@modal/           Vista rápida del producto (ruta interceptada)
+src/app/admin/            Panel: pedidos en vivo, productos, categorías, recibos…
+src/app/api/              GET de catálogo, búsqueda y bolsa; diagnóstico protegido
+src/components/           ui, tienda, catalogo, producto, bolsa, pedido, admin
 src/lib/pricing.ts        Motor de precios por escalones (función pura)
-src/lib/cart.ts           Carrito persistente en el navegador
-src/lib/data/             Consultas a la base de datos
-src/lib/email/            Plantilla y envío del aviso de pedido
-src/app/                  Pantallas públicas y panel
-supabase/                 Esquema, seguridad, funciones y pruebas SQL
-scripts/                  Utilidades: sembrar datos, crear admin, probar flujo
+src/lib/compra.ts         La única cuenta de compra de un producto
+src/lib/cart.ts           Bolsa persistente en el navegador
+src/lib/data/             Consultas con caché por etiquetas
+supabase/                 Esquema, seguridad, funciones, migraciones y pruebas SQL
+scripts/                  Utilidades: crear administradora, verificar, probar flujo
 ```
 
-## Las dos reglas que sostienen el sistema
+## Las reglas que sostienen el sistema
 
-**El precio nunca lo decide el navegador.** El carrito solo guarda pares de
-producto y cantidad. El total se recalcula en PostgreSQL al confirmar, leyendo
-los escalones desde la base. Un carrito manipulado no puede cambiar lo que se
-cobra.
+**El precio nunca lo decide el navegador.** La bolsa solo guarda producto,
+variante y cantidad. El total se recalcula en PostgreSQL al confirmar.
 
-**Confirmar un pedido es una sola operación indivisible.** Verificar el stock,
-calcular precios, descontar inventario y guardar el pedido ocurren juntos o no
-ocurren. Si falla el stock, no se mueve nada.
+**Confirmar un pedido es una sola operación indivisible.** Stock, precios,
+inventario y pedido se guardan juntos o no se guarda nada.
 
-**Un pedido enviado dos veces sigue siendo un pedido.** El navegador manda una
-clave de idempotencia; si llega repetida (doble toque, reintento por mala
-señal), el servidor devuelve el pedido que ya creó en vez de duplicarlo.
+**Un pedido enviado dos veces sigue siendo un pedido.** Una clave de idempotencia
+hace seguro el doble toque o el reintento por mala señal.
 
-**Lo que el carrito muestra es exactamente lo que se envía.** Una sola función
-(`reconciliarCarrito`) decide qué se puede pedir, y la usan tanto la pantalla
-como el formulario.
+**Lo que la bolsa muestra es lo que se envía.** Una sola función
+(`reconciliarCarrito`) decide qué se puede pedir.
+
+**Tener sesión no basta para administrar.** Solo las cuentas de la tabla
+`administradores` leen pedidos y escriben.
 
 ## Scripts útiles
 
 ```bash
-node --env-file=.env.local scripts/crear-admin.mjs correo@ejemplo.com "clave"
+node --env-file=.env.local scripts/crear-admin.mjs correo@ejemplo.com "clave"   # crea y registra la administradora
 node --env-file=.env.local scripts/sembrar-ejemplo.mjs
 node --env-file=.env.local scripts/probar-flujo.mjs
+node --env-file=.env.local scripts/probar-seguridad.mjs
 ```
+
+`scripts/cargar-catalogo-engol.mjs` solo agrega referencias nuevas, en borrador;
+no modifica las que ya existen.

@@ -337,7 +337,8 @@ export function resumenDeCompra(e: { escalones: Escalon[]; stock: number; unidad
   unidadesNuevas: number }): ResumenCompra;
 ```
 Hook `useCompraProducto(producto)` en `src/hooks/`: selección por variante (`Record<string, number>`), `cambiar(id, n)`,
-`resumen`, `agregar()` (agrega, vibra, avisa, limpia). Lo usan `PanelCompra` y `AgregarRapido`.
+`resumen`, `agregar()` (agrega, vibra, avisa, limpia). Lo usa `PanelCompra`. `AgregarRapido` usa el carrito (`useCarrito`) y
+`resumenDeCompra` directamente, sin el hook (decisión de la implementación: evitaba una dependencia entre tareas).
 
 ### 7.4 Avisos (`src/lib/avisos.ts`)
 Store pequeño: `mostrarAviso({ titulo, detalle?, imagen?, accion?: { etiqueta, href? , alHacer? } })`, `cerrarAviso()`.
@@ -403,7 +404,7 @@ Store pequeño: `mostrarAviso({ titulo, detalle?, imagen?, accion?: { etiqueta, 
   un producto activo coincide si para cada grupo alguna alternativa aparece en
   `normalizar(nombre ‖ referencia ‖ descripcion ‖ categoría ‖ departamento ‖ nombres de variantes)` o en la referencia
   compacta `regexp_replace(normalizar(referencia), '[^a-z0-9]', '', 'g')`. Se consulta con
-  `.rpc(..., { count: "exact" }).select(CAMPOS_GRILLA)` para conservar embebidos, orden y rango.
+  `.rpc(..., { count: "exact" })` con el select de la grilla más las columnas de orden (PostgREST solo deja ordenar una RPC por columnas que estén en su select) para conservar embebidos, orden y rango.
 
 ## 9. Base de datos
 
@@ -544,3 +545,23 @@ qué son; poner el texto real de envío en Ajustes; completar la identidad legal
 de tonos con la hoja de contacto (47 accesorios «Tono N» a su color, 200 hex no confiables, 33 fotos que no cuadran,
 marcar agotados con el interruptor en vez de borrar); confirmar los pedidos de prueba (AB-0009/10/11/12/19); revisar el
 pedido AB-0097 del 10-nov.
+
+## 16. Cambios durante la implementación
+Desvíos reales respecto de lo escrito arriba:
+- **Búsqueda por relevancia.** En «Recomendados» con búsqueda, el orden se calcula en TS por nivel de coincidencia (nombre,
+  referencia, categoría, departamento) y se traen hasta 240 resultados. El orden por precio o novedad sigue en la base.
+- **Sin foto al final.** En cada página de «Recomendados», los productos sin foto van al final (uno de ellos abría el catálogo).
+- **404 real.** Un producto inexistente respondía 200 con `noindex`, porque `notFound()` solo devuelve 404 fuera de todo
+  `<Suspense>`. El catálogo se movió a `(tienda)/(catalogo)/` (con su `loading.tsx`) y la ficha no tiene `loading.tsx`. Cambia el
+  árbol del §4: `(tienda)/page.tsx` y `(tienda)/loading.tsx` ahora viven en `(tienda)/(catalogo)/`.
+- **Pedido guardado en el celular solo al llegar desde «Confirmar».** El §6.9 decía «al montar». Ahora la página guarda solo con
+  `?nuevo=1` y luego quita el parámetro: si no, el celular de quien abre el enlace del comprobante (la dueña) acumularía los
+  pedidos de las clientas. La página del pedido además respeta el estado (pagado, enviado, cancelado).
+- **Recibos personalizables** (pedido nuevo del dueño, fuera del §11): destinatario editable, productos en texto libre, título,
+  fecha, nota al pie y vista previa. Las líneas de texto se suman después del descuento; las preferencias (título, nota,
+  datos de pago) se guardan en `localStorage`, sin base.
+- **URL malformada.** `/producto/100%25` o `/producto/%E0%A4%A` responden 500 del enrutador de Next («failed to decode param»)
+  antes de llegar a la página. Ninguna referencia real lleva `%` y no se amplía el proxy a `/producto` (cada prefetch pasaría por
+  él).
+- **Selector en una columna** también en el diálogo de escritorio (el §6.6 pedía dos): la columna de compra mide unos 400 px.
+- **Producción.** La v5 ya está publicada, con los departamentos aplicados (26 categorías, 370 productos).
