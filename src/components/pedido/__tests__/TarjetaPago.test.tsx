@@ -69,6 +69,12 @@ describe("TarjetaPago", () => {
     expect(escribir).toHaveBeenLastCalledWith("45000");
   });
 
+  it("con una llave el botón dice «Copiar llave»", () => {
+    montar({ metodo: "Llave", numero: "@ANAYA123", titular: null });
+
+    expect(screen.getByRole("button", { name: "Copiar llave" })).toBeInTheDocument();
+  });
+
   it("sin datos de pago dice que los enviamos por WhatsApp y no pinta huecos", () => {
     montar({ metodo: null, numero: null, titular: null });
 

@@ -41,7 +41,12 @@ export function TarjetaPago({ pedido, pago, envioInfo, whatsappNegocio }: Props)
             {pago.metodo ? `Transfiere ${total} por ${pago.metodo}` : `Transfiere ${total} a esta cuenta`}
           </p>
           <dl className="mt-4 divide-y divide-linea rounded-md bg-superficie">
-            <Dato etiqueta={pago.metodo ?? "Cuenta"} valor={pago.numero} copiar={pago.numero} texto="Copiar número" />
+            <Dato
+              etiqueta={pago.metodo ?? "Cuenta"}
+              valor={pago.numero}
+              copiar={pago.numero}
+              texto={/llave/i.test(pago.metodo ?? "") ? "Copiar llave" : "Copiar número"}
+            />
             <Dato etiqueta="Valor" valor={total} copiar={String(pedido.total)} texto="Copiar valor" />
           </dl>
           {pago.titular && <p className="mt-3 text-[15px] leading-5 text-tinta">Titular: {pago.titular}</p>}
